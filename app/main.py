@@ -4,12 +4,18 @@ import os
 import shutil
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.database.database import get_db, create_tables
@@ -29,13 +35,47 @@ from app.utils.helpers import (
 setup_logging(settings.log_level, settings.log_file)
 logger = get_logger(__name__)
 
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
+
 # Создание FastAPI приложения
 app = FastAPI(
     title="RAG Telegram Bot API",
     description="API для RAG-сервиса в Telegram боте",
     version="1.0.0",
-    debug=settings.debug
+    debug=settings.debug,
+    lifespan=lifespan
 )
+
+# Добавить rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Обработчики ошибок
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Обработчик ошибок валидации"""
+    logger.warning(f"Ошибка валидации запроса: {exc}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Ошибка валидации данных",
+            "errors": exc.errors(),
+            "body": exc.body
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Общий обработчик исключений"""
+    logger.error(f"Необработанная ошибка: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Внутренняя ошибка сервера",
+            "error": str(exc) if settings.debug else "Произошла неожиданная ошибка"
+        }
+    )
 
 # CORS middleware
 app.add_middleware(
@@ -81,9 +121,10 @@ class DocumentProcessResponse(BaseModel):
 
 
 # События жизненного цикла приложения
-@app.on_event("startup")
-async def startup_event():
-    """Инициализация при запуске"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Управление жизненным циклом приложения"""
+    # Startup
     logger.info("Запуск FastAPI приложения")
     
     # Создать таблицы базы данных
@@ -96,11 +137,10 @@ async def startup_event():
     ensure_directory_exists("./logs")
     
     logger.info("FastAPI приложение успешно запущено")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Очистка при завершении"""
+    
+    yield
+    
+    # Shutdown
     logger.info("Завершение работы FastAPI приложения")
 
 
@@ -120,11 +160,73 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Проверка здоровья сервиса"""
-    return {
+    health_status = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "services": {}
     }
+    
+    # Проверить RAG сервис
+    try:
+        # Простая проверка доступности сервисов
+        from app.services.rag_service import rag_service
+        health_status["services"]["rag"] = "healthy"
+    except Exception as e:
+        health_status["services"]["rag"] = f"unhealthy: {str(e)}"
+        health_status["status"] = "degraded"
+    
+    # Проверить базу данных
+    try:
+        db = next(get_db())
+        db.execute("SELECT 1")
+        health_status["services"]["database"] = "healthy"
+        db.close()
+    except Exception as e:
+        health_status["services"]["database"] = f"unhealthy: {str(e)}"
+        health_status["status"] = "degraded"
+    
+    return health_status
+
+@app.get("/metrics")
+async def get_metrics(db: Session = Depends(get_db)):
+    """Получить метрики сервиса"""
+    try:
+        # Подсчитать общие метрики
+        total_users = db.query(User).count()
+        total_documents = db.query(Document).count()
+        processed_documents = db.query(Document).filter(Document.is_processed == True).count()
+        total_conversations = db.query(Conversation).count()
+        total_messages = db.query(Message).count()
+        
+        # Метрики за последние 24 часа
+        from datetime import timedelta
+        yesterday = datetime.utcnow() - timedelta(days=1)
+        
+        new_users_24h = db.query(User).filter(User.created_at >= yesterday).count()
+        new_documents_24h = db.query(Document).filter(Document.uploaded_at >= yesterday).count()
+        new_messages_24h = db.query(Message).filter(Message.created_at >= yesterday).count()
+        
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "total_metrics": {
+                "users": total_users,
+                "documents": total_documents,
+                "processed_documents": processed_documents,
+                "conversations": total_conversations,
+                "messages": total_messages,
+                "processing_success_rate": round(processed_documents / total_documents * 100, 2) if total_documents > 0 else 0
+            },
+            "last_24h_metrics": {
+                "new_users": new_users_24h,
+                "new_documents": new_documents_24h,
+                "new_messages": new_messages_24h
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения метрик: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка получения метрик: {e}")
 
 
 @app.post("/users/", response_model=dict)
@@ -176,7 +278,9 @@ async def create_or_get_user(user_data: UserCreate, db: Session = Depends(get_db
 
 
 @app.post("/upload/", response_model=DocumentProcessResponse)
+@limiter.limit("5/minute")
 async def upload_and_process_file(
+    request: Request,
     user_id: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
@@ -276,20 +380,21 @@ async def upload_and_process_file(
 
 
 @app.post("/query/", response_model=QueryResponse)
-async def query_document(request: QueryRequest, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+async def query_document(request: Request, query_req: QueryRequest, db: Session = Depends(get_db)):
     """Выполнить запрос к документу"""
     try:
-        logger.info(f"Запрос к документу {request.document_id}: {request.query}")
+        logger.info(f"Запрос к документу {query_req.document_id}: {query_req.query}")
         
         # Проверить пользователя
-        user = db.query(User).filter(User.telegram_id == request.user_id).first()
+        user = db.query(User).filter(User.telegram_id == query_req.user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         
         # Проверить документ
         document = db.query(Document).filter(
             Document.user_id == user.id,
-            Document.file_path.contains(request.document_id)
+            Document.file_path.contains(query_req.document_id)
         ).first()
         
         if not document:
@@ -300,10 +405,10 @@ async def query_document(request: QueryRequest, db: Session = Depends(get_db)):
         
         # Выполнить запрос через RAG сервис
         result = await rag_service.query_document(
-            user_id=request.user_id,
-            document_id=request.document_id,
-            query=request.query,
-            chat_history=request.chat_history
+            user_id=query_req.user_id,
+            document_id=query_req.document_id,
+            query=query_req.query,
+            chat_history=query_req.chat_history
         )
         
         # Сохранить сообщение в БД (найти или создать беседу)
@@ -328,7 +433,7 @@ async def query_document(request: QueryRequest, db: Session = Depends(get_db)):
         user_message = Message(
             conversation_id=conversation.id,
             role="user",
-            content=request.query
+            content=query_req.query
         )
         
         assistant_message = Message(

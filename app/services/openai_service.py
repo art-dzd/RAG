@@ -21,11 +21,31 @@ class OpenAIService:
     
     def __init__(self):
         """Инициализация сервиса"""
-        self.client = OpenAI(api_key=settings.openai_api_key)
-        self.embedding_model = "text-embedding-ada-002"
-        self.chat_model = "gpt-4-1106-preview"  # GPT-4 Turbo
-        
-        logger.info("OpenAI сервис инициализирован")
+        try:
+            self.client = OpenAI(api_key=settings.openai_api_key)
+            self.embedding_model = "text-embedding-3-small"  # Более новая и эффективная модель
+            self.chat_model = "gpt-4-turbo-preview"  # Обновленная модель
+            
+            # Проверка соединения с API
+            self._test_connection()
+            
+            logger.info("OpenAI сервис инициализирован")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации OpenAI сервиса: {e}")
+            raise OpenAIServiceError(f"Не удалось инициализировать OpenAI сервис: {e}")
+    
+    def _test_connection(self):
+        """Проверить соединение с OpenAI API"""
+        try:
+            # Простой тест с минимальным запросом
+            response = self.client.embeddings.create(
+                model=self.embedding_model,
+                input="test"
+            )
+            logger.info("Соединение с OpenAI API успешно установлено")
+        except Exception as e:
+            logger.error(f"Ошибка соединения с OpenAI API: {e}")
+            raise OpenAIServiceError(f"Не удалось подключиться к OpenAI API: {e}")
     
     async def create_embeddings(
         self, 

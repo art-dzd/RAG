@@ -23,19 +23,37 @@ class ChromaVectorStore:
     
     def __init__(self):
         """Инициализация векторного хранилища"""
-        # Убедиться что директория существует
-        ensure_directory_exists(settings.chroma_db_path)
-        
-        # Создать клиент Chroma
-        self.client = chromadb.PersistentClient(
-            path=settings.chroma_db_path,
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True
+        try:
+            # Убедиться что директория существует
+            ensure_directory_exists(settings.chroma_db_path)
+            
+            # Создать клиент Chroma
+            self.client = chromadb.PersistentClient(
+                path=settings.chroma_db_path,
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True,
+                    persist_directory=settings.chroma_db_path
+                )
             )
-        )
-        
-        logger.info(f"Chroma векторное хранилище инициализировано в {settings.chroma_db_path}")
+            
+            # Проверить работоспособность
+            self._test_connection()
+            
+            logger.info(f"Chroma векторное хранилище инициализировано в {settings.chroma_db_path}")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации векторного хранилища: {e}")
+            raise VectorStoreError(f"Не удалось инициализировать векторное хранилище: {e}")
+    
+    def _test_connection(self):
+        """Проверить работоспособность векторного хранилища"""
+        try:
+            # Простой тест - получить список коллекций
+            collections = self.client.list_collections()
+            logger.info(f"Векторное хранилище работает. Коллекций: {len(collections)}")
+        except Exception as e:
+            logger.error(f"Ошибка подключения к векторному хранилищу: {e}")
+            raise VectorStoreError(f"Векторное хранилище недоступно: {e}")
     
     def get_user_collection_name(self, user_id: str, document_id: Optional[str] = None) -> str:
         """
