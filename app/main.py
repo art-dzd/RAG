@@ -1,17 +1,17 @@
-"""FastAPI приложение для RAG сервиса"""
+"""FastAPI application with enhanced security and modern practices"""
 
 import os
-import shutil
+import asyncio
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.exception_handlers import request_validation_exception_handler
-from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, ValidationError
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, ValidationError, Field
 from sqlalchemy.orm import Session
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -27,82 +27,52 @@ from app.utils.helpers import (
     sanitize_filename, 
     generate_unique_id, 
     ensure_directory_exists,
-    get_file_size_mb,
-    is_valid_file_extension
+    get_file_stats,
+    is_valid_file_extension,
+    validate_user_id,
+    sanitize_text_input,
+    validate_and_resolve_path
 )
 
-# Настройка логирования
-setup_logging(settings.log_level, settings.log_file)
+# Setup logging
+setup_logging(settings.log_level, settings.log_file, settings.enable_json_logs)
 logger = get_logger(__name__)
 
+# Security
+security = HTTPBearer(auto_error=False)
+
 # Rate limiting
-limiter = Limiter(key_func=get_remote_address)
-
-# Создание FastAPI приложения
-app = FastAPI(
-    title="RAG Telegram Bot API",
-    description="API для RAG-сервиса в Telegram боте",
-    version="1.0.0",
-    debug=settings.debug,
-    lifespan=lifespan
-)
-
-# Добавить rate limiting
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-# Обработчики ошибок
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Обработчик ошибок валидации"""
-    logger.warning(f"Ошибка валидации запроса: {exc}")
-    return JSONResponse(
-        status_code=422,
-        content={
-            "detail": "Ошибка валидации данных",
-            "errors": exc.errors(),
-            "body": exc.body
-        }
-    )
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    """Общий обработчик исключений"""
-    logger.error(f"Необработанная ошибка: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Внутренняя ошибка сервера",
-            "error": str(exc) if settings.debug else "Произошла неожиданная ошибка"
-        }
-    )
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["100/minute"] if settings.rate_limit_enabled else []
 )
 
 
-# Pydantic модели для API
+# Pydantic models for API with enhanced validation
 class UserCreate(BaseModel):
-    telegram_id: str
-    username: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    """User creation request model"""
+    telegram_id: str = Field(..., min_length=1, max_length=20)
+    username: Optional[str] = Field(None, max_length=100)
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
+    
+    class Config:
+        str_strip_whitespace = True
 
 
 class QueryRequest(BaseModel):
-    user_id: str
-    document_id: str
-    query: str
-    chat_history: Optional[List[Dict[str, str]]] = None
+    """Document query request model"""
+    user_id: str = Field(..., min_length=1, max_length=20)
+    document_id: str = Field(..., min_length=1, max_length=100)
+    query: str = Field(..., min_length=1, max_length=1000)
+    chat_history: Optional[List[Dict[str, str]]] = Field(default=None, max_items=20)
+    
+    class Config:
+        str_strip_whitespace = True
 
 
 class QueryResponse(BaseModel):
+    """Document query response model"""
     success: bool
     query: str
     answer: Optional[str] = None
@@ -112,6 +82,7 @@ class QueryResponse(BaseModel):
 
 
 class DocumentProcessResponse(BaseModel):
+    """Document processing response model"""
     success: bool
     document_id: str
     user_id: str
@@ -120,35 +91,144 @@ class DocumentProcessResponse(BaseModel):
     error: Optional[str] = None
 
 
-# События жизненного цикла приложения
+class HealthResponse(BaseModel):
+    """Health check response model"""
+    status: str
+    timestamp: str
+    version: str
+    services: Dict[str, str]
+
+
+# Application lifecycle
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Управление жизненным циклом приложения"""
+    """Application lifespan manager"""
     # Startup
-    logger.info("Запуск FastAPI приложения")
+    logger.info("Starting FastAPI application")
     
-    # Создать таблицы базы данных
-    create_tables()
-    logger.info("Таблицы базы данных созданы")
-    
-    # Убедиться что необходимые директории существуют
-    ensure_directory_exists(settings.chroma_db_path)
-    ensure_directory_exists("./data/user_files")
-    ensure_directory_exists("./logs")
-    
-    logger.info("FastAPI приложение успешно запущено")
+    try:
+        # Create database tables
+        create_tables()
+        logger.info("Database tables created successfully")
+        
+        # Ensure required directories exist
+        directories = [
+            settings.chroma_db_path,
+            "./data/user_files",
+            "./logs"
+        ]
+        
+        for directory in directories:
+            ensure_directory_exists(directory)
+        
+        logger.info("Required directories ensured")
+        logger.info("FastAPI application started successfully")
+        
+    except Exception as e:
+        logger.error(f"Failed to start application: {e}")
+        raise
     
     yield
     
     # Shutdown
-    logger.info("Завершение работы FastAPI приложения")
+    logger.info("Shutting down FastAPI application")
+    
+    # Close OpenAI service
+    try:
+        from app.services.openai_service import openai_service
+        await openai_service.close()
+        logger.info("OpenAI service closed")
+    except Exception as e:
+        logger.warning(f"Error closing OpenAI service: {e}")
 
 
-# Эндпоинты API
+# Create FastAPI application
+app = FastAPI(
+    title="RAG Telegram Bot API",
+    description="Secure API for RAG service with Telegram bot integration",
+    version="1.0.0",
+    debug=settings.debug,
+    lifespan=lifespan,
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None
+)
 
-@app.get("/")
+# Security middleware
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=["localhost", "127.0.0.1", settings.api_host]
+)
+
+# CORS middleware with restricted origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["*"],
+)
+
+# Rate limiting
+if settings.rate_limit_enabled:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# Dependency for user validation
+async def validate_user_input(user_id: str) -> str:
+    """Validate user ID input"""
+    if not validate_user_id(user_id):
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid user ID format"
+        )
+    return user_id
+
+
+# Error handlers
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    """Handle Pydantic validation errors"""
+    logger.warning(f"Validation error on {request.url}: {exc}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Invalid input data",
+            "errors": exc.errors()
+        }
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions"""
+    logger.warning(f"HTTP error {exc.status_code} on {request.url}: {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "status_code": exc.status_code
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected exceptions"""
+    logger.error(f"Unhandled error on {request.url}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error" if not settings.debug else str(exc),
+            "status_code": 500
+        }
+    )
+
+
+# API endpoints
+@app.get("/", tags=["System"])
 async def root():
-    """Корневой эндпоинт"""
+    """Root endpoint"""
     return {
         "message": "RAG Telegram Bot API",
         "version": "1.0.0",
@@ -157,9 +237,9 @@ async def root():
     }
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check():
-    """Проверка здоровья сервиса"""
+    """Health check endpoint"""
     health_status = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
@@ -167,16 +247,15 @@ async def health_check():
         "services": {}
     }
     
-    # Проверить RAG сервис
+    # Check RAG service
     try:
-        # Простая проверка доступности сервисов
         from app.services.rag_service import rag_service
         health_status["services"]["rag"] = "healthy"
     except Exception as e:
         health_status["services"]["rag"] = f"unhealthy: {str(e)}"
         health_status["status"] = "degraded"
     
-    # Проверить базу данных
+    # Check database
     try:
         db = next(get_db())
         db.execute("SELECT 1")
@@ -186,20 +265,33 @@ async def health_check():
         health_status["services"]["database"] = f"unhealthy: {str(e)}"
         health_status["status"] = "degraded"
     
+    # Check OpenAI service
+    try:
+        from app.services.openai_service import openai_service
+        if await openai_service.validate_api_key():
+            health_status["services"]["openai"] = "healthy"
+        else:
+            health_status["services"]["openai"] = "api_key_invalid"
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["services"]["openai"] = f"unhealthy: {str(e)}"
+        health_status["status"] = "degraded"
+    
     return health_status
 
-@app.get("/metrics")
+
+@app.get("/metrics", tags=["System"])
 async def get_metrics(db: Session = Depends(get_db)):
-    """Получить метрики сервиса"""
+    """Get service metrics"""
     try:
-        # Подсчитать общие метрики
+        # Calculate metrics
         total_users = db.query(User).count()
         total_documents = db.query(Document).count()
         processed_documents = db.query(Document).filter(Document.is_processed == True).count()
         total_conversations = db.query(Conversation).count()
         total_messages = db.query(Message).count()
         
-        # Метрики за последние 24 часа
+        # 24h metrics
         from datetime import timedelta
         yesterday = datetime.utcnow() - timedelta(days=1)
         
@@ -215,7 +307,9 @@ async def get_metrics(db: Session = Depends(get_db)):
                 "processed_documents": processed_documents,
                 "conversations": total_conversations,
                 "messages": total_messages,
-                "processing_success_rate": round(processed_documents / total_documents * 100, 2) if total_documents > 0 else 0
+                "processing_success_rate": round(
+                    processed_documents / total_documents * 100, 2
+                ) if total_documents > 0 else 0
             },
             "last_24h_metrics": {
                 "new_users": new_users_24h,
@@ -225,22 +319,32 @@ async def get_metrics(db: Session = Depends(get_db)):
         }
         
     except Exception as e:
-        logger.error(f"Ошибка получения метрик: {e}")
-        raise HTTPException(status_code=500, detail=f"Ошибка получения метрик: {e}")
+        logger.error(f"Error getting metrics: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving metrics")
 
 
-@app.post("/users/", response_model=dict)
-async def create_or_get_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Создать или получить пользователя"""
+@app.post("/users/", tags=["Users"])
+async def create_or_get_user(
+    user_data: UserCreate, 
+    db: Session = Depends(get_db),
+    user_id: str = Depends(validate_user_input)
+):
+    """Create or get user"""
     try:
-        # Проверить существование пользователя
-        existing_user = db.query(User).filter(User.telegram_id == user_data.telegram_id).first()
+        # Validate user ID matches request
+        if user_data.telegram_id != user_id:
+            raise HTTPException(status_code=400, detail="User ID mismatch")
+        
+        # Check if user exists
+        existing_user = db.query(User).filter(
+            User.telegram_id == user_data.telegram_id
+        ).first()
         
         if existing_user:
-            # Обновить время последней активности
+            # Update last activity
             existing_user.last_activity = datetime.utcnow()
             db.commit()
-            logger.info(f"Пользователь {user_data.telegram_id} найден")
+            logger.info(f"User {user_data.telegram_id} found")
             
             return {
                 "id": existing_user.id,
@@ -250,19 +354,19 @@ async def create_or_get_user(user_data: UserCreate, db: Session = Depends(get_db
                 "is_new": False
             }
         
-        # Создать нового пользователя
+        # Create new user with sanitized data
         new_user = User(
             telegram_id=user_data.telegram_id,
-            username=user_data.username,
-            first_name=user_data.first_name,
-            last_name=user_data.last_name
+            username=sanitize_text_input(user_data.username) if user_data.username else None,
+            first_name=sanitize_text_input(user_data.first_name) if user_data.first_name else None,
+            last_name=sanitize_text_input(user_data.last_name) if user_data.last_name else None
         )
         
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
         
-        logger.info(f"Создан новый пользователь {user_data.telegram_id}")
+        logger.info(f"Created new user {user_data.telegram_id}")
         
         return {
             "id": new_user.id,
@@ -272,77 +376,101 @@ async def create_or_get_user(user_data: UserCreate, db: Session = Depends(get_db
             "is_new": True
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Ошибка создания/получения пользователя: {e}")
-        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
+        logger.error(f"Error creating/getting user: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
 
 
-@app.post("/upload/", response_model=DocumentProcessResponse)
-@limiter.limit("5/minute")
+@app.post("/upload/", response_model=DocumentProcessResponse, tags=["Documents"])
+@limiter.limit(f"{settings.max_requests_per_minute}/minute" if settings.rate_limit_enabled else "1000/minute")
 async def upload_and_process_file(
     request: Request,
     user_id: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """Загрузить и обработать файл"""
+    """Upload and process document with enhanced security"""
+    validated_user_id = await validate_user_input(user_id)
+    
     try:
-        logger.info(f"Получен файл {file.filename} от пользователя {user_id}")
+        logger.info(f"Processing file upload: {file.filename} from user {validated_user_id}")
         
-        # Проверить пользователя
-        user = db.query(User).filter(User.telegram_id == user_id).first()
+        # Check user exists
+        user = db.query(User).filter(User.telegram_id == validated_user_id).first()
         if not user:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            raise HTTPException(status_code=404, detail="User not found")
         
-        # Валидация файла
+        # File validation
         if not file.filename:
-            raise HTTPException(status_code=400, detail="Имя файла не указано")
+            raise HTTPException(status_code=400, detail="Filename is required")
         
+        # Validate file extension
         if not is_valid_file_extension(file.filename, settings.allowed_file_types):
             raise HTTPException(
                 status_code=400, 
-                detail=f"Неподдерживаемый тип файла. Разрешены: {', '.join(settings.allowed_file_types)}"
+                detail=f"Unsupported file type. Allowed: {', '.join(settings.allowed_file_types)}"
             )
         
-        # Создать безопасное имя файла
+        # Check user's file limit
+        user_files_count = db.query(Document).filter(Document.user_id == user.id).count()
+        if user_files_count >= settings.max_files_per_user:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File limit exceeded. Maximum {settings.max_files_per_user} files per user"
+            )
+        
+        # Create secure filename and path
         safe_filename = sanitize_filename(file.filename)
         document_id = generate_unique_id()
         
-        # Создать путь для сохранения
-        user_dir = f"./data/user_files/{user_id}"
-        ensure_directory_exists(user_dir)
-        file_path = os.path.join(user_dir, f"{document_id}_{safe_filename}")
+        # Secure path construction
+        user_dir = f"./data/user_files/{validated_user_id}"
+        safe_user_dir = validate_and_resolve_path(user_dir)
+        ensure_directory_exists(str(safe_user_dir))
         
-        # Сохранить файл
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        file_path = safe_user_dir / f"{document_id}_{safe_filename}"
         
-        file_size_mb = get_file_size_mb(file_path)
+        # Read and validate file content
+        content = await file.read()
         
-        # Проверить размер файла
+        # Check file size
+        file_size_mb = len(content) / (1024 * 1024)
         if file_size_mb > settings.max_file_size_mb:
-            os.remove(file_path)  # Удалить файл
             raise HTTPException(
                 status_code=413, 
-                detail=f"Файл слишком большой: {file_size_mb:.2f}MB > {settings.max_file_size_mb}MB"
+                detail=f"File too large: {file_size_mb:.2f}MB > {settings.max_file_size_mb}MB"
             )
         
-        logger.info(f"Файл сохранён: {file_path} ({file_size_mb:.2f}MB)")
+        # Basic malware check (simple content validation)
+        if b'\x00' in content[:1024]:  # Check for null bytes in header
+            raise HTTPException(status_code=400, detail="Invalid file content detected")
         
+        # Save file securely
         try:
-            # Обработать документ через RAG сервис
+            with open(file_path, "wb") as f:
+                f.write(content)
+        except OSError as e:
+            logger.error(f"Error saving file: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save file")
+        
+        logger.info(f"File saved: {file_path} ({file_size_mb:.2f}MB)")
+        
+        # Process document through RAG service
+        try:
             result = await rag_service.process_document(
-                user_id=user_id,
-                file_path=file_path,
+                user_id=validated_user_id,
+                file_path=str(file_path),
                 document_id=document_id
             )
             
-            # Сохранить информацию о документе в БД
+            # Save document record
             document_record = Document(
                 user_id=user.id,
                 filename=safe_filename,
-                original_filename=file.filename,
-                file_path=file_path,
+                original_filename=sanitize_text_input(file.filename),
+                file_path=str(file_path),
                 file_type=file.filename.split('.')[-1].lower(),
                 file_size_mb=file_size_mb,
                 file_hash=result['file_info']['file_hash'],
@@ -354,64 +482,84 @@ async def upload_and_process_file(
             db.add(document_record)
             db.commit()
             
-            logger.info(f"Документ {document_id} успешно обработан для пользователя {user_id}")
+            logger.info(f"Document {document_id} processed successfully for user {validated_user_id}")
             
             return DocumentProcessResponse(
                 success=True,
                 document_id=document_id,
-                user_id=user_id,
+                user_id=validated_user_id,
                 chunks_count=result['chunks_count'],
                 processing_time_seconds=result['processing_time_seconds']
             )
             
         except (RAGServiceError, FileParserError) as e:
-            # Удалить файл при ошибке обработки
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            # Clean up file on processing error
+            if file_path.exists():
+                file_path.unlink()
             
-            logger.error(f"Ошибка обработки документа: {e}")
-            raise HTTPException(status_code=500, detail=f"Ошибка обработки файла: {e}")
+            logger.error(f"Document processing error: {e}")
+            raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Неожиданная ошибка при загрузке файла: {e}")
-        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {e}")
+        logger.error(f"Unexpected error during file upload: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/query/", response_model=QueryResponse)
-@limiter.limit("30/minute")
-async def query_document(request: Request, query_req: QueryRequest, db: Session = Depends(get_db)):
-    """Выполнить запрос к документу"""
+@app.post("/query/", response_model=QueryResponse, tags=["Documents"])
+@limiter.limit(f"{settings.max_requests_per_minute}/minute" if settings.rate_limit_enabled else "1000/minute")
+async def query_document(
+    request: Request, 
+    query_req: QueryRequest, 
+    db: Session = Depends(get_db)
+):
+    """Query document with enhanced validation"""
+    validated_user_id = await validate_user_input(query_req.user_id)
+    
     try:
-        logger.info(f"Запрос к документу {query_req.document_id}: {query_req.query}")
+        logger.info(f"Document query from user {validated_user_id}: {query_req.query[:100]}...")
         
-        # Проверить пользователя
-        user = db.query(User).filter(User.telegram_id == query_req.user_id).first()
+        # Sanitize query input
+        clean_query = sanitize_text_input(query_req.query, max_length=1000)
+        if not clean_query.strip():
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+        
+        # Validate user
+        user = db.query(User).filter(User.telegram_id == validated_user_id).first()
         if not user:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            raise HTTPException(status_code=404, detail="User not found")
         
-        # Проверить документ
+        # Find document
         document = db.query(Document).filter(
             Document.user_id == user.id,
             Document.file_path.contains(query_req.document_id)
         ).first()
         
         if not document:
-            raise HTTPException(status_code=404, detail="Документ не найден")
+            raise HTTPException(status_code=404, detail="Document not found")
         
         if not document.is_processed:
-            raise HTTPException(status_code=400, detail="Документ ещё не обработан")
+            raise HTTPException(status_code=400, detail="Document not yet processed")
         
-        # Выполнить запрос через RAG сервис
+        # Sanitize chat history
+        clean_history = []
+        if query_req.chat_history:
+            for msg in query_req.chat_history[-10:]:  # Limit to last 10 messages
+                if isinstance(msg, dict) and 'role' in msg and 'content' in msg:
+                    clean_content = sanitize_text_input(str(msg['content']), max_length=500)
+                    if clean_content and msg['role'] in ['user', 'assistant']:
+                        clean_history.append({'role': msg['role'], 'content': clean_content})
+        
+        # Execute query
         result = await rag_service.query_document(
-            user_id=query_req.user_id,
+            user_id=validated_user_id,
             document_id=query_req.document_id,
-            query=query_req.query,
-            chat_history=query_req.chat_history
+            query=clean_query,
+            chat_history=clean_history
         )
         
-        # Сохранить сообщение в БД (найти или создать беседу)
+        # Save conversation
         conversation = db.query(Conversation).filter(
             Conversation.user_id == user.id,
             Conversation.document_id == document.id,
@@ -429,11 +577,11 @@ async def query_document(request: Request, query_req: QueryRequest, db: Session 
             db.commit()
             db.refresh(conversation)
         
-        # Сохранить сообщения пользователя и ассистента
+        # Save messages
         user_message = Message(
             conversation_id=conversation.id,
             role="user",
-            content=query_req.query
+            content=clean_query
         )
         
         assistant_message = Message(
@@ -448,7 +596,7 @@ async def query_document(request: Request, query_req: QueryRequest, db: Session 
         db.add(user_message)
         db.add(assistant_message)
         
-        # Обновить время последнего сообщения в беседе
+        # Update conversation timestamp
         conversation.last_message_at = datetime.utcnow()
         db.commit()
         
@@ -463,41 +611,62 @@ async def query_document(request: Request, query_req: QueryRequest, db: Session 
         
     except HTTPException:
         raise
-    except (RAGServiceError) as e:
-        logger.error(f"Ошибка выполнения запроса: {e}")
-        raise HTTPException(status_code=500, detail=f"Ошибка RAG сервиса: {e}")
+    except RAGServiceError as e:
+        logger.error(f"RAG service error: {e}")
+        raise HTTPException(status_code=500, detail="Query processing failed")
     except Exception as e:
-        logger.error(f"Неожиданная ошибка при выполнении запроса: {e}")
-        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {e}")
+        logger.error(f"Unexpected error during query: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/users/{user_id}/documents/")
-async def get_user_documents(user_id: str, db: Session = Depends(get_db)):
-    """Получить список документов пользователя"""
+@app.get("/users/{user_id}/documents/", tags=["Documents"])
+async def get_user_documents(
+    user_id: str, 
+    db: Session = Depends(get_db)
+):
+    """Get user's documents list"""
+    validated_user_id = await validate_user_input(user_id)
+    
     try:
-        user = db.query(User).filter(User.telegram_id == user_id).first()
+        user = db.query(User).filter(User.telegram_id == validated_user_id).first()
         if not user:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            raise HTTPException(status_code=404, detail="User not found")
         
         documents = db.query(Document).filter(Document.user_id == user.id).all()
         
         document_list = []
         for doc in documents:
-            stats = rag_service.get_document_stats(user_id, doc.file_path.split('/')[-1].split('_')[0])
-            
-            document_list.append({
-                "id": doc.id,
-                "filename": doc.original_filename,
-                "file_type": doc.file_type,
-                "file_size_mb": doc.file_size_mb,
-                "uploaded_at": doc.uploaded_at.isoformat(),
-                "is_processed": doc.is_processed,
-                "chunks_count": doc.total_chunks,
-                "is_indexed": stats.get('is_indexed', False)
-            })
+            try:
+                stats = rag_service.get_document_stats(
+                    validated_user_id, 
+                    doc.file_path.split('/')[-1].split('_')[0]
+                )
+                
+                document_list.append({
+                    "id": doc.id,
+                    "filename": doc.original_filename,
+                    "file_type": doc.file_type,
+                    "file_size_mb": doc.file_size_mb,
+                    "uploaded_at": doc.uploaded_at.isoformat(),
+                    "is_processed": doc.is_processed,
+                    "chunks_count": doc.total_chunks,
+                    "is_indexed": stats.get('is_indexed', False)
+                })
+            except Exception as e:
+                logger.warning(f"Error getting stats for document {doc.id}: {e}")
+                document_list.append({
+                    "id": doc.id,
+                    "filename": doc.original_filename,
+                    "file_type": doc.file_type,
+                    "file_size_mb": doc.file_size_mb,
+                    "uploaded_at": doc.uploaded_at.isoformat(),
+                    "is_processed": doc.is_processed,
+                    "chunks_count": doc.total_chunks,
+                    "is_indexed": False
+                })
         
         return {
-            "user_id": user_id,
+            "user_id": validated_user_id,
             "documents": document_list,
             "total_documents": len(document_list)
         }
@@ -505,17 +674,23 @@ async def get_user_documents(user_id: str, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Ошибка получения списка документов: {e}")
-        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {e}")
+        logger.error(f"Error getting user documents: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.delete("/documents/{document_id}")
-async def delete_document(document_id: str, user_id: str, db: Session = Depends(get_db)):
-    """Удалить документ"""
+@app.delete("/documents/{document_id}", tags=["Documents"])
+async def delete_document(
+    document_id: str, 
+    user_id: str, 
+    db: Session = Depends(get_db)
+):
+    """Delete document with security validation"""
+    validated_user_id = await validate_user_input(user_id)
+    
     try:
-        user = db.query(User).filter(User.telegram_id == user_id).first()
+        user = db.query(User).filter(User.telegram_id == validated_user_id).first()
         if not user:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            raise HTTPException(status_code=404, detail="User not found")
         
         document = db.query(Document).filter(
             Document.user_id == user.id,
@@ -523,28 +698,32 @@ async def delete_document(document_id: str, user_id: str, db: Session = Depends(
         ).first()
         
         if not document:
-            raise HTTPException(status_code=404, detail="Документ не найден")
+            raise HTTPException(status_code=404, detail="Document not found")
         
-        # Удалить из векторной БД
-        rag_service.delete_document(user_id, document_id)
+        # Delete from vector store
+        rag_service.delete_document(validated_user_id, document_id)
         
-        # Удалить файл
-        if os.path.exists(document.file_path):
-            os.remove(document.file_path)
+        # Delete physical file securely
+        try:
+            file_path = validate_and_resolve_path(document.file_path)
+            if file_path.exists():
+                file_path.unlink()
+        except Exception as e:
+            logger.warning(f"Error deleting file {document.file_path}: {e}")
         
-        # Удалить запись из БД
+        # Delete from database
         db.delete(document)
         db.commit()
         
-        logger.info(f"Документ {document_id} удалён для пользователя {user_id}")
+        logger.info(f"Document {document_id} deleted for user {validated_user_id}")
         
-        return {"message": "Документ успешно удалён", "document_id": document_id}
+        return {"message": "Document deleted successfully", "document_id": document_id}
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Ошибка удаления документа: {e}")
-        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {e}")
+        logger.error(f"Error deleting document: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 if __name__ == "__main__":
@@ -553,5 +732,6 @@ if __name__ == "__main__":
         "app.main:app",
         host=settings.api_host,
         port=settings.api_port,
-        reload=settings.debug
+        reload=settings.debug,
+        access_log=True
     ) 

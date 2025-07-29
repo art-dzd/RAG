@@ -1,233 +1,387 @@
-"""Сервис для работы с OpenAI API"""
+"""Async OpenAI service with enhanced security and modern practices"""
 
+import asyncio
 import time
 from typing import List, Dict, Any, Optional
-import openai
-from openai import OpenAI
+from contextlib import asynccontextmanager
+
+from openai import AsyncOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from app.config import settings
 from app.utils.logging_config import get_logger
+from app.utils.helpers import sanitize_text_input
 
 logger = get_logger(__name__)
 
 
 class OpenAIServiceError(Exception):
-    """Исключение для ошибок OpenAI сервиса"""
+    """Custom exception for OpenAI service errors"""
+    pass
+
+
+class RateLimitError(OpenAIServiceError):
+    """Exception for rate limit errors"""
     pass
 
 
 class OpenAIService:
-    """Сервис для работы с OpenAI API"""
+    """Async OpenAI service with enhanced features and security"""
     
     def __init__(self):
-        """Инициализация сервиса"""
+        """Initialize the OpenAI service"""
         try:
-            self.client = OpenAI(api_key=settings.openai_api_key)
-            self.embedding_model = "text-embedding-3-small"  # Более новая и эффективная модель
-            self.chat_model = "gpt-4-turbo-preview"  # Обновленная модель
-            
-            # Проверка соединения с API
-            self._test_connection()
-            
-            logger.info("OpenAI сервис инициализирован")
-        except Exception as e:
-            logger.error(f"Ошибка инициализации OpenAI сервиса: {e}")
-            raise OpenAIServiceError(f"Не удалось инициализировать OpenAI сервис: {e}")
-    
-    def _test_connection(self):
-        """Проверить соединение с OpenAI API"""
-        try:
-            # Простой тест с минимальным запросом
-            response = self.client.embeddings.create(
-                model=self.embedding_model,
-                input="test"
+            self.client = AsyncOpenAI(
+                api_key=settings.openai_api_key.get_secret_value(),
+                timeout=settings.request_timeout,
+                max_retries=3
             )
-            logger.info("Соединение с OpenAI API успешно установлено")
+            
+            # Model configuration
+            self.embedding_model = settings.openai_embedding_model
+            self.chat_model = settings.openai_model
+            self.max_tokens = settings.openai_max_tokens
+            self.temperature = settings.openai_temperature
+            
+            # Rate limiting
+            self._request_count = 0
+            self._last_reset = time.time()
+            self._max_requests_per_minute = 60  # Conservative limit
+            
+            logger.info(f"OpenAI service initialized with model: {self.chat_model}")
+            
         except Exception as e:
-            logger.error(f"Ошибка соединения с OpenAI API: {e}")
-            raise OpenAIServiceError(f"Не удалось подключиться к OpenAI API: {e}")
+            logger.error(f"Failed to initialize OpenAI service: {e}")
+            raise OpenAIServiceError(f"Initialization failed: {e}")
     
+    async def _check_rate_limit(self) -> None:
+        """Check and enforce rate limiting"""
+        current_time = time.time()
+        
+        # Reset counter every minute
+        if current_time - self._last_reset > 60:
+            self._request_count = 0
+            self._last_reset = current_time
+        
+        if self._request_count >= self._max_requests_per_minute:
+            wait_time = 60 - (current_time - self._last_reset)
+            if wait_time > 0:
+                logger.warning(f"Rate limit exceeded, waiting {wait_time:.1f}s")
+                await asyncio.sleep(wait_time)
+                self._request_count = 0
+                self._last_reset = time.time()
+        
+        self._request_count += 1
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type((Exception,))
+    )
     async def create_embeddings(
         self, 
         texts: List[str], 
-        batch_size: int = 100
+        batch_size: int = 50
     ) -> List[List[float]]:
         """
-        Создать эмбеддинги для списка текстов
+        Create embeddings for a list of texts with batching and retry logic
         
         Args:
-            texts: Список текстов для создания эмбеддингов
-            batch_size: Размер батча для обработки
+            texts: List of texts to create embeddings for
+            batch_size: Size of each batch for processing
             
         Returns:
-            Список векторов эмбеддингов
+            List of embedding vectors
             
         Raises:
-            OpenAIServiceError: При ошибке создания эмбеддингов
+            OpenAIServiceError: On API errors
+            RateLimitError: On rate limit exceeded
         """
-        try:
-            all_embeddings = []
+        if not texts:
+            return []
+        
+        # Validate and sanitize inputs
+        sanitized_texts = []
+        for text in texts:
+            if not isinstance(text, str):
+                text = str(text)
             
-            # Обработка батчами для больших объёмов данных
-            for i in range(0, len(texts), batch_size):
-                batch = texts[i:i + batch_size]
-                logger.info(f"Обработка батча {i//batch_size + 1}, размер: {len(batch)}")
+            # Sanitize text input
+            clean_text = sanitize_text_input(text, max_length=8000)
+            if not clean_text.strip():
+                clean_text = "empty"  # Fallback for empty texts
+            
+            sanitized_texts.append(clean_text)
+        
+        all_embeddings = []
+        
+        try:
+            # Process in batches
+            for i in range(0, len(sanitized_texts), batch_size):
+                batch = sanitized_texts[i:i + batch_size]
+                
+                await self._check_rate_limit()
+                
+                logger.debug(f"Creating embeddings for batch {i//batch_size + 1}, size: {len(batch)}")
                 
                 start_time = time.time()
                 
-                response = self.client.embeddings.create(
+                response = await self.client.embeddings.create(
                     model=self.embedding_model,
-                    input=batch
+                    input=batch,
+                    encoding_format="float"
                 )
                 
-                # Извлечь эмбеддинги из ответа
+                # Extract embeddings from response
                 batch_embeddings = [item.embedding for item in response.data]
                 all_embeddings.extend(batch_embeddings)
                 
                 processing_time = time.time() - start_time
-                logger.info(f"Батч обработан за {processing_time:.2f} секунд")
+                logger.debug(f"Batch processed in {processing_time:.2f}s")
                 
-                # Небольшая пауза между батчами для соблюдения лимитов API
-                if i + batch_size < len(texts):
-                    time.sleep(0.1)
+                # Small delay between batches to avoid overwhelming the API
+                if i + batch_size < len(sanitized_texts):
+                    await asyncio.sleep(0.1)
             
-            logger.info(f"Создано {len(all_embeddings)} эмбеддингов")
+            logger.info(f"Created {len(all_embeddings)} embeddings successfully")
             return all_embeddings
             
         except Exception as e:
-            logger.error(f"Ошибка создания эмбеддингов: {e}")
-            raise OpenAIServiceError(f"Не удалось создать эмбеддинги: {e}")
+            error_msg = str(e)
+            
+            if "rate_limit" in error_msg.lower():
+                logger.error("Rate limit exceeded")
+                raise RateLimitError("OpenAI API rate limit exceeded")
+            elif "quota" in error_msg.lower():
+                logger.error("API quota exceeded")
+                raise OpenAIServiceError("OpenAI API quota exceeded")
+            else:
+                logger.error(f"Error creating embeddings: {e}")
+                raise OpenAIServiceError(f"Failed to create embeddings: {e}")
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        retry=retry_if_exception_type((Exception,))
+    )
     async def create_single_embedding(self, text: str) -> List[float]:
         """
-        Создать эмбеддинг для одного текста
+        Create embedding for a single text with retry logic
         
         Args:
-            text: Текст для создания эмбеддинга
+            text: Text to create embedding for
             
         Returns:
-            Вектор эмбеддинга
+            Embedding vector
             
         Raises:
-            OpenAIServiceError: При ошибке создания эмбеддинга
+            OpenAIServiceError: On API errors
         """
+        if not text or not isinstance(text, str):
+            text = str(text) if text else "empty"
+        
+        # Sanitize input
+        clean_text = sanitize_text_input(text, max_length=8000)
+        if not clean_text.strip():
+            clean_text = "empty"
+        
         try:
-            response = self.client.embeddings.create(
+            await self._check_rate_limit()
+            
+            response = await self.client.embeddings.create(
                 model=self.embedding_model,
-                input=text
+                input=clean_text,
+                encoding_format="float"
             )
             
             embedding = response.data[0].embedding
-            logger.debug(f"Создан эмбеддинг для текста длиной {len(text)} символов")
+            logger.debug(f"Created embedding for text length: {len(clean_text)}")
             return embedding
             
         except Exception as e:
-            logger.error(f"Ошибка создания эмбеддинга: {e}")
-            raise OpenAIServiceError(f"Не удалось создать эмбеддинг: {e}")
+            error_msg = str(e)
+            
+            if "rate_limit" in error_msg.lower():
+                raise RateLimitError("OpenAI API rate limit exceeded")
+            else:
+                logger.error(f"Error creating single embedding: {e}")
+                raise OpenAIServiceError(f"Failed to create embedding: {e}")
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((Exception,))
+    )
     async def generate_chat_response(
         self,
         messages: List[Dict[str, str]],
         context_documents: Optional[List[str]] = None,
-        max_tokens: int = 1000,
-        temperature: float = 0.7
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        stream: bool = False
     ) -> Dict[str, Any]:
         """
-        Генерировать ответ используя Chat API
+        Generate chat response using the chat completion API
         
         Args:
-            messages: История сообщений в формате [{"role": "user", "content": "..."}]
-            context_documents: Список релевантных документов для контекста
-            max_tokens: Максимальное количество токенов в ответе
-            temperature: Температура генерации (0.0 - 2.0)
+            messages: List of messages in chat format
+            context_documents: List of relevant documents for context
+            max_tokens: Maximum tokens in response
+            temperature: Sampling temperature
+            stream: Whether to stream the response
             
         Returns:
-            Словарь с ответом и метаданными
+            Response dictionary with content and metadata
             
         Raises:
-            OpenAIServiceError: При ошибке генерации ответа
+            OpenAIServiceError: On API errors
         """
+        if not messages:
+            raise ValueError("Messages list cannot be empty")
+        
+        # Use instance defaults if not provided
+        if max_tokens is None:
+            max_tokens = self.max_tokens
+        if temperature is None:
+            temperature = self.temperature
+        
+        # Validate and sanitize messages
+        clean_messages = []
+        for msg in messages:
+            if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
+                logger.warning(f"Invalid message format: {msg}")
+                continue
+            
+            role = msg['role']
+            content = sanitize_text_input(str(msg['content']), max_length=4000)
+            
+            if role in ['user', 'assistant', 'system'] and content.strip():
+                clean_messages.append({'role': role, 'content': content})
+        
+        if not clean_messages:
+            raise ValueError("No valid messages after sanitization")
+        
         try:
+            await self._check_rate_limit()
+            
+            # Build system message with context
+            system_message = self._build_system_message(context_documents)
+            if system_message:
+                # Insert system message at the beginning
+                final_messages = [system_message] + clean_messages
+            else:
+                final_messages = clean_messages
+            
+            logger.debug(f"Sending {len(final_messages)} messages to {self.chat_model}")
+            
             start_time = time.time()
             
-            # Подготовить сообщения
-            system_message = self._build_system_message(context_documents)
-            full_messages = [system_message] + messages if system_message else messages
-            
-            logger.info(f"Отправка запроса к GPT-4 с {len(full_messages)} сообщениями")
-            
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.chat_model,
-                messages=full_messages,
+                messages=final_messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                stream=False
+                stream=stream,
+                frequency_penalty=0.1,  # Reduce repetition
+                presence_penalty=0.1   # Encourage topic diversity
             )
             
             response_time = time.time() - start_time
             
-            # Извлечь данные из ответа
-            assistant_message = response.choices[0].message.content
-            usage = response.usage
-            
-            result = {
-                'content': assistant_message,
-                'role': 'assistant',
-                'usage': {
-                    'prompt_tokens': usage.prompt_tokens,
-                    'completion_tokens': usage.completion_tokens,
-                    'total_tokens': usage.total_tokens
-                },
-                'response_time_ms': int(response_time * 1000),
-                'model': self.chat_model
-            }
-            
-            logger.info(
-                f"Ответ получен за {response_time:.2f}с, "
-                f"токенов: {usage.total_tokens}"
-            )
-            
-            return result
-            
+            # Extract response data
+            if stream:
+                # Handle streaming response (not implemented in this version)
+                raise NotImplementedError("Streaming not implemented yet")
+            else:
+                choice = response.choices[0]
+                content = choice.message.content
+                usage = response.usage
+                
+                result = {
+                    'content': content,
+                    'role': 'assistant',
+                    'usage': {
+                        'prompt_tokens': usage.prompt_tokens,
+                        'completion_tokens': usage.completion_tokens,
+                        'total_tokens': usage.total_tokens
+                    },
+                    'response_time_ms': int(response_time * 1000),
+                    'model': self.chat_model,
+                    'finish_reason': choice.finish_reason
+                }
+                
+                logger.info(
+                    f"Generated response in {response_time:.2f}s, "
+                    f"tokens: {usage.total_tokens}"
+                )
+                
+                return result
+                
         except Exception as e:
-            logger.error(f"Ошибка генерации ответа: {e}")
-            raise OpenAIServiceError(f"Не удалось сгенерировать ответ: {e}")
+            error_msg = str(e)
+            
+            if "rate_limit" in error_msg.lower():
+                raise RateLimitError("OpenAI API rate limit exceeded")
+            elif "quota" in error_msg.lower():
+                raise OpenAIServiceError("OpenAI API quota exceeded")
+            elif "context_length" in error_msg.lower():
+                raise OpenAIServiceError("Input too long for model context")
+            else:
+                logger.error(f"Error generating chat response: {e}")
+                raise OpenAIServiceError(f"Failed to generate response: {e}")
     
     def _build_system_message(self, context_documents: Optional[List[str]]) -> Optional[Dict[str, str]]:
         """
-        Построить системное сообщение с контекстом
+        Build system message with context documents
         
         Args:
-            context_documents: Список релевантных документов
+            context_documents: List of relevant documents
             
         Returns:
-            Системное сообщение или None
+            System message dictionary or None
         """
         if not context_documents:
             return {
                 'role': 'system',
                 'content': (
-                    "Ты - полезный AI-ассистент, который отвечает на вопросы пользователей. "
-                    "Отвечай точно, информативно и по существу. Если не знаешь ответа, так и скажи."
+                    "You are a helpful AI assistant that answers questions accurately and informatively. "
+                    "If you don't know the answer, say so clearly. "
+                    "Always respond in the same language as the user's question."
                 )
             }
         
-        # Объединить документы в контекст
-        context_text = "\n\n---\n\n".join(context_documents)
+        # Combine and sanitize context documents
+        clean_docs = []
+        total_length = 0
+        max_context_length = 6000  # Leave room for the actual conversation
         
-        system_prompt = f"""Ты - AI-ассистент, который отвечает на вопросы на основе предоставленных документов.
+        for doc in context_documents:
+            if isinstance(doc, str) and doc.strip():
+                clean_doc = sanitize_text_input(doc, max_length=2000)
+                if clean_doc and total_length + len(clean_doc) < max_context_length:
+                    clean_docs.append(clean_doc)
+                    total_length += len(clean_doc)
+                else:
+                    break  # Stop if we exceed context length
+        
+        if not clean_docs:
+            return self._build_system_message(None)
+        
+        context_text = "\n\n---\n\n".join(clean_docs)
+        
+        system_prompt = f"""You are an AI assistant that answers questions based on provided documents.
 
-ВАЖНЫЕ ПРАВИЛА:
-1. Отвечай ТОЛЬКО на основе информации из предоставленных документов
-2. Если информации в документах недостаточно для ответа, честно скажи об этом
-3. Не придумывай информацию, которой нет в документах
-4. Ссылайся на конкретные части документов при ответе
-5. Отвечай на русском языке
+IMPORTANT RULES:
+1. Answer ONLY based on information from the provided documents
+2. If the documents don't contain enough information to answer, say so clearly
+3. Don't make up information that isn't in the documents
+4. Reference specific parts of documents when answering
+5. Always respond in the same language as the user's question
 
-КОНТЕКСТ ИЗ ДОКУМЕНТОВ:
+CONTEXT FROM DOCUMENTS:
 {context_text}
 
-Отвечай на вопросы пользователя на основе этого контекста."""
+Answer user questions based on this context."""
 
         return {
             'role': 'system', 
@@ -236,23 +390,89 @@ class OpenAIService:
     
     async def estimate_tokens(self, text: str) -> int:
         """
-        Оценить количество токенов в тексте
+        Estimate token count for text (rough approximation)
         
         Args:
-            text: Текст для оценки
+            text: Text to estimate tokens for
             
         Returns:
-            Приблизительное количество токенов
+            Estimated token count
         """
-        # Простая оценка: ~4 символа = 1 токен для русского текста
-        # Это приблизительная оценка, для точной нужна tiktoken библиотека
-        return max(1, len(text) // 4)
+        if not text:
+            return 0
+        
+        # Rough estimation: ~4 characters per token for English, ~3 for Russian
+        # This is approximate - for exact count, we'd need tiktoken
+        char_count = len(text)
+        
+        # Detect if text is primarily Russian (Cyrillic)
+        cyrillic_chars = len([c for c in text if '\u0400' <= c <= '\u04FF'])
+        if cyrillic_chars > char_count * 0.3:  # >30% Cyrillic
+            return max(1, char_count // 3)
+        else:
+            return max(1, char_count // 4)
     
     def get_max_context_length(self) -> int:
-        """Получить максимальную длину контекста для модели"""
-        # GPT-4 Turbo имеет контекст 128k токенов
-        return 128000
+        """Get maximum context length for the current model"""
+        model_limits = {
+            'gpt-4o-mini': 128000,
+            'gpt-4o': 128000,
+            'gpt-4-turbo': 128000,
+            'gpt-4': 8192,
+            'gpt-3.5-turbo': 16385,
+        }
+        
+        return model_limits.get(self.chat_model, 4096)
+    
+    async def validate_api_key(self) -> bool:
+        """
+        Validate that the API key is working
+        
+        Returns:
+            True if API key is valid
+        """
+        try:
+            # Test with a minimal request
+            await self.create_single_embedding("test")
+            return True
+        except Exception as e:
+            logger.error(f"API key validation failed: {e}")
+            return False
+    
+    async def get_model_info(self) -> Dict[str, Any]:
+        """
+        Get information about available models
+        
+        Returns:
+            Dictionary with model information
+        """
+        try:
+            models = await self.client.models.list()
+            
+            available_models = []
+            for model in models.data:
+                if any(prefix in model.id for prefix in ['gpt', 'text-embedding']):
+                    available_models.append({
+                        'id': model.id,
+                        'created': model.created,
+                        'owned_by': model.owned_by
+                    })
+            
+            return {
+                'available_models': available_models,
+                'current_chat_model': self.chat_model,
+                'current_embedding_model': self.embedding_model
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting model info: {e}")
+            return {'error': str(e)}
+    
+    async def close(self):
+        """Close the HTTP client"""
+        if hasattr(self.client, '_client'):
+            await self.client._client.aclose()
 
 
-# Глобальный экземпляр сервиса
+# Global service instance
 openai_service = OpenAIService() 

@@ -1,329 +1,301 @@
-# RAG Telegram Bot MVP
+# RAG Telegram Bot
 
-Система RAG (Retrieval-Augmented Generation) в виде Telegram-бота для обработки и анализа документов с использованием GPT-4.1 mini.
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-green.svg)](https://fastapi.tiangolo.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 🎯 Возможности
+A production-ready Retrieval-Augmented Generation (RAG) system implemented as a Telegram bot with FastAPI backend. Supports document processing (PDF, DOCX, TXT) and contextual Q&A using OpenAI's GPT-4o-mini.
 
-- 📄 **Обработка документов**: PDF, DOCX, TXT файлы
-- 🔍 **Семантический поиск**: Векторное индексирование с помощью Chroma
-- 💬 **Контекстные ответы**: GPT-4.1 mini с историей диалога
-- 👥 **Многопользовательский режим**: Изоляция данных между пользователями
-- 🚀 **Быстрая обработка**: Асинхронная архитектура
-- 📊 **Мониторинг**: Подробное логирование и статистика
+## 🏗️ Architecture
 
-## 🏗 Архитектура
-
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        TG[Telegram Bot Client]
+        API[REST API Client]
+    end
+    
+    subgraph "Application Layer"
+        BOT[Telegram Bot<br/>aiogram 3.x]
+        FAST[FastAPI Server<br/>Security Middleware]
+    end
+    
+    subgraph "Service Layer"
+        RAG[RAG Service<br/>Document Processing]
+        OPENAI[OpenAI Service<br/>Async GPT-4o-mini]
+        PARSER[File Parser<br/>PDF/DOCX/TXT]
+        VECTOR[Vector Store<br/>Async ChromaDB]
+    end
+    
+    subgraph "Data Layer"
+        SQL[(SQLite Database<br/>User & Document Metadata)]
+        CHROMA[(ChromaDB<br/>Vector Embeddings)]
+        FILES[File Storage<br/>Secure Path Handling]
+    end
+    
+    subgraph "External Services"
+        OPENAI_API[OpenAI API<br/>GPT-4o-mini & Embeddings]
+        TELEGRAM_API[Telegram Bot API]
+    end
+    
+    TG --> BOT
+    API --> FAST
+    
+    BOT --> RAG
+    FAST --> RAG
+    
+    RAG --> OPENAI
+    RAG --> PARSER
+    RAG --> VECTOR
+    
+    OPENAI --> OPENAI_API
+    BOT --> TELEGRAM_API
+    
+    FAST --> SQL
+    VECTOR --> CHROMA
+    PARSER --> FILES
 ```
-RAG Telegram Bot
-├── FastAPI Server (REST API)
-├── Telegram Bot (aiogram)
-├── RAG Service (LangChain)
-├── Vector Store (Chroma)
-├── File Parser (PDF/DOCX/TXT)
-├── OpenAI Integration (GPT-4 + Embeddings)
-└── SQLite Database (метаданные)
-```
 
-## 🛠 Технический стек
+## ✨ Features
 
-- **Backend**: FastAPI, Python 3.8+
-- **Telegram Bot**: aiogram 3.x
-- **RAG**: LangChain, OpenAI API
-- **Векторная БД**: ChromaDB
-- **База данных**: SQLite + SQLAlchemy
-- **Парсинг**: PyPDF2, python-docx
-- **Логирование**: structlog
+- **🔒 Security First**: Input validation, path traversal protection, XSS prevention
+- **⚡ Async Architecture**: Full async/await implementation for optimal performance
+- **📄 Multi-format Support**: PDF, DOCX, TXT document processing
+- **🤖 Modern AI**: GPT-4o-mini with text-embedding-3-small for embeddings
+- **👥 Multi-user**: Isolated data and collections per user
+- **🛡️ Rate Limiting**: Configurable request limits and security middleware
+- **📊 Monitoring**: Health checks, metrics, and comprehensive logging
+- **🔧 Production Ready**: Error handling, retries, and graceful degradation
 
-## 📋 Требования
+## 🚀 Quick Start
+
+### Prerequisites
 
 - Python 3.8+
-- OpenAI API ключ
+- OpenAI API key
 - Telegram Bot Token
-- 4+ GB RAM (рекомендуется)
-- Linux/macOS/Windows
 
-## 🚀 Установка
+### Installation
 
-### 1. Клонирование репозитория
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd RAG
+   ```
 
-```bash
-git clone <repository-url>
-cd RAG
-```
+2. **Create virtual environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/macOS
+   # or
+   venv\Scripts\activate     # Windows
+   ```
 
-### 2. Создание виртуального окружения
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-python -m venv venv
+4. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
 
-# Linux/macOS
-source venv/bin/activate
+5. **Run the system**
+   ```bash
+   python run.py
+   ```
 
-# Windows
-venv\Scripts\activate
-```
+## ⚙️ Configuration
 
-### 3. Установка зависимостей
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Настройка конфигурации
-
-Скопируйте файл конфигурации:
-
-```bash
-cp .env.example .env
-```
-
-Отредактируйте `.env` файл:
+Create a `.env` file with the following variables:
 
 ```bash
-# OpenAI Configuration
-OPENAI_API_KEY=sk-your-openai-api-key-here
+# Required
+OPENAI_API_KEY=sk-your-openai-api-key
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 
-# Telegram Bot Configuration  
-TELEGRAM_BOT_TOKEN=your-telegram-bot-token-here
+# Optional - Advanced Configuration
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+MAX_FILE_SIZE_MB=50
+RATE_LIMIT_ENABLED=true
+MAX_REQUESTS_PER_MINUTE=30
 
-# Остальные настройки можно оставить по умолчанию
+# Security
+CORS_ORIGINS=["http://localhost:3000"]
+SECRET_KEY=your-secret-key
+
+# Database
+DATABASE_URL=sqlite:///./data/app.db
+CHROMA_DB_PATH=./data/chroma_db
+
+# Logging
+LOG_LEVEL=INFO
+ENABLE_JSON_LOGS=false
 ```
 
-### 5. Получение API ключей
+## 🛠️ Tech Stack
 
-**OpenAI API ключ:**
-1. Зарегистрируйтесь на [platform.openai.com](https://platform.openai.com)
-2. Создайте API ключ в разделе API Keys
-3. Убедитесь что у вас есть кредиты на счету
+| Component | Technology | Version |
+|-----------|------------|---------|
+| **Backend** | FastAPI | 0.110.0 |
+| **Bot Framework** | aiogram | 3.5.0 |
+| **AI/ML** | OpenAI API | 1.14.0 |
+| **Vector DB** | ChromaDB | 0.4.24 |
+| **Database** | SQLite + SQLAlchemy | 2.0.29 |
+| **Text Processing** | LangChain | 0.1.13 |
+| **Security** | Bleach, Cryptography | Latest |
+| **Async HTTP** | httpx | 0.27.0 |
 
-**Telegram Bot Token:**
-1. Напишите [@BotFather](https://t.me/BotFather) в Telegram
-2. Создайте нового бота командой `/newbot`
-3. Следуйте инструкциям и получите токен
+## 📡 API Endpoints
 
-## 🏃‍♂️ Запуск
+### System
+- `GET /` - Service status
+- `GET /health` - Health check with service status
+- `GET /metrics` - Usage metrics and statistics
 
-### Запуск всей системы
+### Users
+- `POST /users/` - Create or retrieve user
 
+### Documents
+- `POST /upload/` - Upload and process document
+- `POST /query/` - Query document with RAG
+- `GET /users/{user_id}/documents/` - List user documents
+- `DELETE /documents/{document_id}` - Delete document
+
+## 🧪 Testing
+
+Run the test suite:
 ```bash
-python run.py
+python test_system.py
 ```
 
-Система запустит:
-- FastAPI сервер на порту 8000
-- Telegram бота
-- Векторную базу данных Chroma
-- SQLite базу для метаданных
+For development testing:
+```bash
+pytest tests/ -v
+python -m pytest --cov=app tests/
+```
 
-### Проверка работы
+## 🔐 Security Features
 
-1. **API**: Откройте http://localhost:8000/docs
-2. **Bot**: Найдите вашего бота в Telegram и отправьте `/start`
+- **Input Validation**: Comprehensive validation for all user inputs
+- **Path Traversal Protection**: Secure file handling with path validation
+- **XSS Prevention**: Text sanitization using bleach library
+- **Rate Limiting**: Configurable rate limits per endpoint
+- **Access Control**: User-based data isolation
+- **Secure Headers**: Security middleware for HTTP headers
+- **File Type Validation**: MIME type checking and content validation
 
-## 💻 Использование
+## 📊 Monitoring & Logging
 
-### Команды бота
+The system includes comprehensive monitoring:
 
-- `/start` - Начать работу с ботом
-- `/help` - Справка по использованию
-- `/documents` - Список ваших документов  
-- `/clear` - Очистить историю чата
+- **Health Checks**: Multi-service health monitoring
+- **Metrics**: User, document, and message statistics
+- **Structured Logging**: JSON logging support with correlation IDs
+- **Error Tracking**: Detailed error logging with context
+- **Performance Metrics**: Response times and processing statistics
 
-### Workflow
+## 🏗️ Development
 
-1. **Загрузка документа**: Отправьте файл боту
-2. **Обработка**: Дождитесь создания индекса (1-3 минуты)
-3. **Вопросы**: Задавайте вопросы по содержимому документа
-4. **Ответы**: Получайте контекстные ответы на основе документа
-
-### Примеры вопросов
-
-- "О чём этот документ?"
-- "Какие основные выводы в тексте?"
-- "Найди информацию о [конкретная тема]"
-- "Что говорится про [вопрос]?"
-
-## 📁 Структура проекта
-
+### Project Structure
 ```
 RAG/
 ├── app/
-│   ├── config.py              # Конфигурация
-│   ├── main.py               # FastAPI приложение
-│   ├── database/             # Модели БД
-│   ├── services/             # Бизнес-логика
-│   │   ├── file_parser.py    # Парсинг файлов
-│   │   ├── vector_store.py   # Векторная БД
-│   │   ├── openai_service.py # OpenAI API
-│   │   └── rag_service.py    # RAG логика
-│   ├── telegram/             # Telegram бот
-│   │   ├── bot.py           # Основной бот
-│   │   └── handlers.py      # Обработчики
-│   └── utils/               # Утилиты
-├── data/                    # Данные
-│   ├── chroma_db/          # Векторная БД
-│   ├── user_files/         # Файлы пользователей
-│   └── app.db             # SQLite база
-├── logs/                   # Логи
-├── requirements.txt        # Зависимости
-├── .env                   # Конфигурация
-└── run.py                 # Точка входа
+│   ├── config.py              # Configuration management
+│   ├── main.py               # FastAPI application
+│   ├── database/             # Database models & connection
+│   ├── services/             # Business logic
+│   │   ├── rag_service.py    # RAG orchestration
+│   │   ├── openai_service.py # OpenAI API integration
+│   │   ├── vector_store.py   # ChromaDB operations
+│   │   └── file_parser.py    # Document parsing
+│   ├── telegram/             # Telegram bot
+│   └── utils/               # Utilities & helpers
+├── data/                    # Data storage
+├── logs/                    # Application logs
+└── requirements.txt         # Dependencies
 ```
 
-## 🔧 Конфигурация
+### Code Quality
 
-Основные настройки в `.env`:
+The project follows:
+- **PEP 8** style guidelines
+- **Type hints** for better code documentation
+- **Async/await** patterns throughout
+- **Error handling** with custom exceptions
+- **Security best practices**
+- **Comprehensive logging**
 
-```bash
-# OpenAI
-OPENAI_API_KEY=your-key-here
+### Contributing
 
-# Telegram  
-TELEGRAM_BOT_TOKEN=your-token-here
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
-# Файлы
-MAX_FILE_SIZE_MB=50
-ALLOWED_FILE_TYPES=pdf,docx,txt
+## 📝 Usage Examples
 
-# RAG
-CHUNK_SIZE=1500
-CHUNK_OVERLAP=200
-TOP_K_RESULTS=5
+### Telegram Bot Commands
 
-# API
-API_HOST=localhost
-API_PORT=8000
-DEBUG=false
+- `/start` - Initialize bot and get welcome message
+- `/help` - Show help and usage instructions
+- `/documents` - List your uploaded documents
+- `/clear` - Clear chat history
+
+### Document Processing Flow
+
+1. **Upload**: Send a document file to the bot
+2. **Processing**: System parses, chunks, and indexes the content
+3. **Query**: Ask questions about the document content
+4. **Response**: Get contextual answers based on document content
+
+### Sample Queries
+
+- "What is the main topic of this document?"
+- "Summarize the key findings"
+- "Find information about [specific topic]"
+- "What does the document say about [question]?"
+
+## 🚀 Deployment
+
+### Docker (Recommended)
+
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "run.py"]
 ```
 
-## 🧪 Тестирование
+### Production Considerations
 
-### Автоматическое тестирование
+- Use environment variables for secrets
+- Set up proper logging aggregation
+- Configure reverse proxy (nginx)
+- Enable HTTPS
+- Set up monitoring and alerting
+- Regular database backups
 
-Проект включает комплексный тестовый скрипт для проверки всех функций:
+## 📄 License
 
-```bash
-# Запустить все тесты
-python3 test_system.py
-```
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-Тесты проверяют:
-- ✅ Health check API
-- ✅ Создание пользователей
-- ✅ Загрузку и обработку документов
-- ✅ Запросы к документам и получение ответов
-- ✅ Списки документов пользователей
-- ✅ Метрики системы
+## 🤝 Support
 
-### Ручное тестирование
+- **Issues**: GitHub Issues for bug reports
+- **Documentation**: Check the `/docs` endpoint when running in debug mode
+- **API Reference**: Available at `/redoc` when running in debug mode
 
-1. **Проверить API**: `curl http://localhost:8000/health`
-2. **Загрузить документ через бота**: Отправьте PDF/DOCX/TXT файл
-3. **Задать вопрос**: Напишите вопрос по содержимому документа
+## 🔄 Version History
 
-## 🐛 Отладка
-
-### Логи
-
-Логи сохраняются в `./logs/app.log` и выводятся в консоль.
-
-Уровни логирования:
-- `DEBUG` - Детальная отладка
-- `INFO` - Основная информация (по умолчанию)
-- `WARNING` - Предупреждения
-- `ERROR` - Ошибки
-
-### Мониторинг
-
-**Эндпоинты для мониторинга:**
-- `GET /health` - Состояние сервисов
-- `GET /metrics` - Метрики использования
-- `GET /` - Основная информация
-
-### Частые проблемы
-
-**"Ошибка OpenAI API"**
-- Проверьте правильность API ключа
-- Убедитесь что есть кредиты на счету
-- Проверьте интернет соединение
-
-**"Telegram bot не отвечает"**
-- Проверьте правильность токена бота
-- Убедитесь что FastAPI сервер запущен
-- Проверьте логи на ошибки
-
-**"Файл не обрабатывается"**
-- Проверьте формат файла (PDF/DOCX/TXT)
-- Убедитесь что размер файла < 50MB
-- Проверьте что файл содержит текст
-
-**"Долгая обработка документов"**
-- Большие файлы обрабатываются дольше
-- Проверьте доступность OpenAI API
-- Увеличьте таймауты если необходимо
-
-## 📊 Производительность
-
-### Рекомендуемые характеристики
-
-- **CPU**: 2+ ядра
-- **RAM**: 4+ GB
-- **Диск**: 10+ GB свободного места
-- **Сеть**: Стабильное интернет соединение
-
-### Ограничения
-
-- Максимальный размер файла: 50 MB
-- Максимальный размер чанка: 1500 символов
-- История диалога: 10 последних сообщений
-- Таймаут обработки: 5 минут
-
-## 🔒 Безопасность
-
-- Изоляция данных между пользователями
-- Валидация загружаемых файлов
-- Санитизация имён файлов
-- Ограничения на размер файлов
-- Логирование всех операций
-
-## 📈 Мониторинг
-
-### Метрики
-
-API предоставляет следующие эндпоинты:
-
-- `GET /` - Статус системы
-- `GET /health` - Проверка здоровья
-- `GET /users/{user_id}/documents/` - Документы пользователя
-
-### Логирование
-
-Все операции логируются с временными метками:
-- Загрузка файлов
-- Обработка документов  
-- Запросы пользователей
-- Ошибки системы
-
-## 🤝 Вклад в проект
-
-1. Fork репозитория
-2. Создайте feature branch
-3. Внесите изменения
-4. Добавьте тесты
-5. Создайте Pull Request
-
-## 📄 Лицензия
-
-MIT License - смотрите файл LICENSE для деталей.
-
-## 📞 Поддержка
-
-При возникновении проблем:
-1. Проверьте логи в `./logs/app.log`
-2. Убедитесь в правильности конфигурации
-3. Проверьте статус всех сервисов
-4. Создайте issue с описанием проблемы
-
----
-
-**Создано для демонстрации навыков разработки RAG-систем и интеграции с современными AI API.** 
+- **v1.0.0**: Initial release with core RAG functionality
+- Enhanced security and async architecture
+- Production-ready monitoring and logging 
