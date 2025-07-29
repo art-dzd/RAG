@@ -2,7 +2,7 @@
 
 import os
 from typing import List
-from pydantic import Field
+from pydantic import Field, validator
 from pydantic_settings import BaseSettings
 
 
@@ -39,6 +39,34 @@ class Settings(BaseSettings):
     api_port: int = Field(8000, env="API_PORT")
     debug: bool = Field(False, env="DEBUG")
     
+    @validator('openai_api_key')
+    def validate_openai_key(cls, v):
+        if not v or v == "your_openai_api_key_here":
+            raise ValueError("OPENAI_API_KEY должен быть установлен")
+        if not v.startswith("sk-"):
+            raise ValueError("OPENAI_API_KEY должен начинаться с 'sk-'")
+        return v
+    
+    @validator('telegram_bot_token')
+    def validate_telegram_token(cls, v):
+        if not v or v == "your_telegram_bot_token_here":
+            raise ValueError("TELEGRAM_BOT_TOKEN должен быть установлен")
+        return v
+    
+    @validator('api_port')
+    def validate_port(cls, v):
+        if not 1 <= v <= 65535:
+            raise ValueError("API_PORT должен быть между 1 и 65535")
+        return v
+    
+    @validator('max_file_size_mb')
+    def validate_file_size(cls, v):
+        if v <= 0:
+            raise ValueError("MAX_FILE_SIZE_MB должен быть положительным")
+        if v > 100:
+            raise ValueError("MAX_FILE_SIZE_MB не должен превышать 100MB")
+        return v
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
