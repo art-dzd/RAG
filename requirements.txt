@@ -1,63 +1,38 @@
-# Core Framework
-fastapi==0.110.0
-uvicorn[standard]==0.28.0
-python-multipart==0.0.9
+# FastAPI и веб-сервер
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
 
 # Telegram Bot
-aiogram==3.5.0
+aiogram==3.2.0
 
-# AI/ML and RAG
-langchain==0.1.13
-langchain-openai==0.1.1
-langchain-community==0.0.29
-langchain-core==0.1.42
+# RAG и LangChain
+langchain==0.0.350
+langchain-openai==0.0.2
+langchain-community==0.0.8
+
+# Векторная БД
+chromadb==0.4.18
+
+# OpenAI
 openai==1.14.0
 
-# Vector Database
-chromadb==0.4.24
-
-# File Processing
+# Парсинг файлов
 PyPDF2==3.0.1
 python-docx==1.1.0
-python-magic-bin==0.4.14; platform_system == "Windows"
-python-magic==0.4.27; platform_system != "Windows"
 
-# Database
-sqlalchemy==2.0.29
-aiosqlite==0.20.0
+# База данных
+sqlalchemy==2.0.23
+aiosqlite==0.19.0
 
-# Configuration and Environment
-python-dotenv==1.0.1
-pydantic==2.6.4
-pydantic-settings==2.2.1
+# Утилиты
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
 
-# HTTP and Networking
-aiofiles==23.2.0
-httpx==0.27.0
+# Асинхронность и HTTP
+aiofiles==23.2.1
+httpx==0.25.2
 
-# Security
-bleach==6.1.0
-cryptography==42.0.5
-passlib[bcrypt]==1.7.4
-
-# Logging and Monitoring
-structlog==24.1.0
-prometheus-client==0.20.0
-
-# Rate Limiting and Performance
-slowapi==0.1.9
-tenacity==8.2.3
-
-# Development and Testing
-pytest==8.1.1
-pytest-asyncio==0.23.6
-pytest-cov==5.0.0
-black==24.3.0
-isort==5.13.2
-flake8==7.0.0
-mypy==1.9.0
-
-# Additional utilities
-click==8.1.7
-rich==13.7.1
-tqdm==4.66.2 
+# Логирование и мониторинг
+structlog==23.2.0 
