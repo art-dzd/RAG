@@ -1,38 +1,39 @@
-# FastAPI и веб-сервер
-fastapi==0.104.1
-uvicorn==0.24.0
-python-multipart==0.0.6
+# FastAPI и веб-сервер (стабильные версии для Python 3.13)
+fastapi==0.115.6
+uvicorn==0.32.1
+python-multipart==0.0.12
 
-# Telegram Bot
-aiogram==3.2.0
+# Telegram Bot (стабильная версия)
+aiogram==3.15.0
 
-# RAG и LangChain
-langchain==0.0.350
-langchain-openai==0.0.2
-langchain-community==0.0.8
+# RAG и LangChain (совместимые версии для Python 3.13)
+langchain==0.3.12
+langchain-openai==0.2.14
+langchain-community==0.3.12
+langchain-chroma==0.2.5
 
-# Векторная БД
-chromadb==0.4.18
+# Векторная БД (стабильная для Python 3.13)
+chromadb==0.5.23
 
-# OpenAI
-openai==1.14.0
+# OpenAI (совместимая версия)
+openai==1.54.4
 
 # Парсинг файлов
 PyPDF2==3.0.1
-python-docx==1.1.0
+python-docx==1.1.2
 
 # База данных
-sqlalchemy==2.0.23
-aiosqlite==0.19.0
+sqlalchemy==2.0.36
+aiosqlite==0.20.0
 
-# Утилиты
-python-dotenv==1.0.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
+# Утилиты (проверенные версии)
+python-dotenv==1.0.1
+pydantic==2.9.2
+pydantic-settings==2.7.0
 
 # Асинхронность и HTTP
-aiofiles==23.2.1
-httpx==0.25.2
+aiofiles==24.1.0
+httpx==0.28.1
 
 # Логирование и мониторинг
-structlog==23.2.0 
+structlog==25.4.0 
