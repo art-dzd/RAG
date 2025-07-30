@@ -2,7 +2,8 @@
 
 import os
 from typing import List, Optional
-from pydantic import BaseSettings, Field, validator, SecretStr
+from pydantic import Field, validator, SecretStr
+from pydantic_settings import BaseSettings
 import secrets
 
 

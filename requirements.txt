@@ -6,17 +6,17 @@ python-multipart==0.0.12
 # Telegram Bot (стабильная версия)
 aiogram==3.15.0
 
-# RAG и LangChain (совместимые версии для Python 3.13)
-langchain==0.3.12
-langchain-openai==0.2.14
-langchain-community==0.3.12
-langchain-chroma==0.2.5
+# RAG и LangChain (гибкие версии для совместимости)
+langchain>=0.3.12
+langchain-openai>=0.2.14
+langchain-community>=0.3.12
+langchain-chroma>=0.2.5
 
-# Векторная БД (стабильная для Python 3.13)
-chromadb==0.5.23
+# Векторная БД (совместимая с LangChain)
+chromadb>=1.0.9
 
-# OpenAI (совместимая версия)
-openai==1.54.4
+# OpenAI (совместимая версия для LangChain)
+openai>=1.58.1,<2.0.0
 
 # Парсинг файлов
 PyPDF2==3.0.1
@@ -36,4 +36,21 @@ aiofiles==24.1.0
 httpx==0.28.1
 
 # Логирование и мониторинг
-structlog==25.4.0 
+structlog==25.4.0
+
+# Безопасность (критически важные пакеты)
+bleach==6.2.0
+cryptography==44.0.0
+passlib[bcrypt]==1.7.4
+
+# Rate limiting и производительность (восстановленные зависимости)
+slowapi==0.1.9
+tenacity==8.5.0
+
+# Дополнительные утилиты для production
+prometheus-client==0.21.1
+
+# Развитие и тестирование (опционально)
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0 
