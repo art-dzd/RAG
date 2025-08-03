@@ -48,6 +48,11 @@ class OpenAIService:
             self._last_reset = time.time()
             self._max_requests_per_minute = 60  # Conservative limit
             
+            # Simple in-memory cache for embeddings
+            self._embedding_cache = {}
+            self._cache_max_size = 1000  # Maximum cache entries
+            self._cache_ttl = 3600  # Cache TTL in seconds (1 hour)
+            
             logger.info(f"OpenAI service initialized with model: {self.chat_model}")
             
         except Exception as e:
@@ -100,9 +105,12 @@ class OpenAIService:
         if not texts:
             return []
         
-        # Validate and sanitize inputs
+        # Validate and sanitize inputs with size limits
         sanitized_texts = []
-        for text in texts:
+        total_tokens = 0
+        max_tokens_per_text = 8192  # OpenAI limit for text-embedding-3-small
+        
+        for i, text in enumerate(texts):
             if not isinstance(text, str):
                 text = str(text)
             
@@ -111,7 +119,25 @@ class OpenAIService:
             if not clean_text.strip():
                 clean_text = "empty"  # Fallback for empty texts
             
+            # Check token count for this text
+            estimated_tokens = len(clean_text.split()) * 1.3  # Rough estimation
+            if estimated_tokens > max_tokens_per_text:
+                logger.warning(f"Text {i} too long ({estimated_tokens:.0f} tokens), truncating")
+                # Truncate to safe length
+                words = clean_text.split()
+                safe_words = words[:int(max_tokens_per_text / 1.3)]
+                clean_text = " ".join(safe_words)
+                estimated_tokens = len(safe_words) * 1.3
+            
+            total_tokens += estimated_tokens
             sanitized_texts.append(clean_text)
+        
+        # Check total batch size
+        if total_tokens > 100000:  # Conservative limit for batch
+            logger.warning(f"Batch too large ({total_tokens:.0f} tokens), reducing batch size")
+            # Reduce batch size dynamically
+            safe_batch_size = max(1, int(batch_size * (100000 / total_tokens)))
+            batch_size = min(batch_size, safe_batch_size)
         
         all_embeddings = []
         
@@ -142,6 +168,10 @@ class OpenAIService:
                 # Small delay between batches to avoid overwhelming the API
                 if i + batch_size < len(sanitized_texts):
                     await asyncio.sleep(0.1)
+            
+            # Cache embeddings
+            for i, (text, embedding) in enumerate(zip(sanitized_texts, all_embeddings)):
+                self._cache_embedding(text, embedding)
             
             logger.info(f"Created {len(all_embeddings)} embeddings successfully")
             return all_embeddings
@@ -180,10 +210,25 @@ class OpenAIService:
         if not text or not isinstance(text, str):
             text = str(text) if text else "empty"
         
-        # Sanitize input
+        # Sanitize input with size limits
         clean_text = sanitize_text_input(text, max_length=8000)
         if not clean_text.strip():
             clean_text = "empty"
+        
+        # Check token count and truncate if necessary
+        estimated_tokens = len(clean_text.split()) * 1.3
+        max_tokens_per_text = 8192  # OpenAI limit for text-embedding-3-small
+        
+        if estimated_tokens > max_tokens_per_text:
+            logger.warning(f"Text too long ({estimated_tokens:.0f} tokens), truncating")
+            words = clean_text.split()
+            safe_words = words[:int(max_tokens_per_text / 1.3)]
+            clean_text = " ".join(safe_words)
+        
+        # Check cache first
+        cached_embedding = self._get_cached_embedding(clean_text)
+        if cached_embedding:
+            return cached_embedding
         
         try:
             await self._check_rate_limit()
@@ -195,6 +240,10 @@ class OpenAIService:
             )
             
             embedding = response.data[0].embedding
+            
+            # Cache the embedding
+            self._cache_embedding(clean_text, embedding)
+            
             logger.debug(f"Created embedding for text length: {len(clean_text)}")
             return embedding
             
@@ -467,6 +516,46 @@ Answer user questions based on this context."""
         except Exception as e:
             logger.error(f"Error getting model info: {e}")
             return {'error': str(e)}
+    
+    def _cache_embedding(self, text: str, embedding: List[float]) -> None:
+        """Cache an embedding with TTL"""
+        import hashlib
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        
+        # Clean cache if it's too large
+        if len(self._embedding_cache) >= self._cache_max_size:
+            # Remove oldest entries
+            current_time = time.time()
+            self._embedding_cache = {
+                k: v for k, v in self._embedding_cache.items()
+                if current_time - v['timestamp'] < self._cache_ttl
+            }
+        
+        self._embedding_cache[text_hash] = {
+            'embedding': embedding,
+            'timestamp': time.time()
+        }
+    
+    def _get_cached_embedding(self, text: str) -> Optional[List[float]]:
+        """Get cached embedding if available and not expired"""
+        import hashlib
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        
+        if text_hash in self._embedding_cache:
+            cached = self._embedding_cache[text_hash]
+            if time.time() - cached['timestamp'] < self._cache_ttl:
+                logger.debug(f"Cache hit for text hash: {text_hash[:8]}")
+                return cached['embedding']
+            else:
+                # Remove expired entry
+                del self._embedding_cache[text_hash]
+        
+        return None
+    
+    def clear_cache(self) -> None:
+        """Clear the embedding cache"""
+        self._embedding_cache.clear()
+        logger.info("Embedding cache cleared")
     
     async def close(self):
         """Close the HTTP client"""

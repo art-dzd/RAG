@@ -3,6 +3,7 @@
 import asyncio
 import os
 import uuid
+import concurrent.futures
 from typing import List, Dict, Any, Optional, Tuple
 
 import chromadb
@@ -57,8 +58,10 @@ class ChromaVectorStore:
         """Test vector store connection"""
         try:
             # Simple test - list collections
-            loop = asyncio.get_event_loop()
-            collections = await loop.run_in_executor(None, self._client.list_collections)
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                collections = await asyncio.get_event_loop().run_in_executor(
+                    executor, self._client.list_collections
+                )
             logger.info(f"Vector store connection OK. Collections: {len(collections)}")
             return True
         except Exception as e:
@@ -71,14 +74,16 @@ class ChromaVectorStore:
             validate_user_id(user_id)
             safe_name = f"user_{user_id}_{collection_name}"
             
-            loop = asyncio.get_event_loop()
-            collection = await loop.run_in_executor(
-                None, 
-                lambda: self._client.get_or_create_collection(
-                    name=safe_name,
-                    metadata={"user_id": user_id, "created_at": str(asyncio.get_event_loop().time())}
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                # Получаем время до вызова executor
+                current_time = asyncio.get_event_loop().time()
+                collection = await asyncio.get_event_loop().run_in_executor(
+                    executor, 
+                    lambda: self._client.get_or_create_collection(
+                        name=safe_name,
+                        metadata={"user_id": user_id, "created_at": str(current_time)}
+                    )
                 )
-            )
             
             logger.info(f"Collection {safe_name} created/retrieved for user {user_id}")
             return True
@@ -86,6 +91,29 @@ class ChromaVectorStore:
         except Exception as e:
             logger.error(f"Failed to create collection {collection_name}: {e}")
             raise VectorStoreError(f"Collection creation failed: {e}")
+    
+    async def get_or_create_user_collection(self, user_id: str) -> str:
+        """Get or create a single collection for all user documents"""
+        try:
+            validate_user_id(user_id)
+            collection_name = f"user_{user_id}_documents"
+            
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                current_time = asyncio.get_event_loop().time()
+                collection = await asyncio.get_event_loop().run_in_executor(
+                    executor, 
+                    lambda: self._client.get_or_create_collection(
+                        name=collection_name,
+                        metadata={"user_id": user_id, "created_at": str(current_time)}
+                    )
+                )
+            
+            logger.info(f"User collection {collection_name} ready for user {user_id}")
+            return collection_name
+            
+        except Exception as e:
+            logger.error(f"Failed to get/create user collection for {user_id}: {e}")
+            raise VectorStoreError(f"User collection creation failed: {e}")
     
     async def add_documents(
         self, 
@@ -118,21 +146,22 @@ class ChromaVectorStore:
                 for meta in metadatas:
                     meta["user_id"] = user_id
             
-            loop = asyncio.get_event_loop()
-            collection = await loop.run_in_executor(
-                None, 
-                lambda: self._client.get_collection(safe_name)
-            )
-            
-            await loop.run_in_executor(
-                None,
-                lambda: collection.add(
-                    embeddings=embeddings,
-                    documents=texts,
-                    metadatas=metadatas,
-                    ids=document_ids
+            # Используем ThreadPoolExecutor для синхронных операций ChromaDB
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                collection = await asyncio.get_event_loop().run_in_executor(
+                    executor, 
+                    lambda: self._client.get_collection(safe_name)
                 )
-            )
+                
+                await asyncio.get_event_loop().run_in_executor(
+                    executor,
+                    lambda: collection.add(
+                        embeddings=embeddings,
+                        documents=texts,
+                        metadatas=metadatas,
+                        ids=document_ids
+                    )
+                )
             
             logger.info(f"Added {len(texts)} documents to collection {safe_name}")
             return True
@@ -140,6 +169,60 @@ class ChromaVectorStore:
         except Exception as e:
             logger.error(f"Failed to add documents to {collection_name}: {e}")
             raise VectorStoreError(f"Document addition failed: {e}")
+    
+    async def add_documents_to_user_collection(
+        self,
+        user_id: str,
+        texts: List[str],
+        embeddings: List[List[float]],
+        metadatas: Optional[List[Dict[str, Any]]] = None,
+        document_ids: Optional[List[str]] = None
+    ) -> bool:
+        """Add documents to user's main collection"""
+        try:
+            validate_user_id(user_id)
+            collection_name = await self.get_or_create_user_collection(user_id)
+            
+            if not texts or not embeddings:
+                raise VectorStoreError("Empty texts or embeddings provided")
+            
+            if len(texts) != len(embeddings):
+                raise VectorStoreError("Texts and embeddings length mismatch")
+            
+            # Generate IDs if not provided
+            if document_ids is None:
+                document_ids = [str(uuid.uuid4()) for _ in texts]
+            
+            # Prepare metadata with document info
+            if metadatas is None:
+                metadatas = [{"user_id": user_id} for _ in texts]
+            else:
+                for meta in metadatas:
+                    meta["user_id"] = user_id
+            
+            # Add documents to user collection
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                collection = await asyncio.get_event_loop().run_in_executor(
+                    executor, 
+                    lambda: self._client.get_collection(collection_name)
+                )
+                
+                await asyncio.get_event_loop().run_in_executor(
+                    executor,
+                    lambda: collection.add(
+                        embeddings=embeddings,
+                        documents=texts,
+                        metadatas=metadatas,
+                        ids=document_ids
+                    )
+                )
+            
+            logger.info(f"Added {len(texts)} documents to user collection {collection_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to add documents to user collection: {e}")
+            raise VectorStoreError(f"User document addition failed: {e}")
     
     async def query_documents(
         self, 
@@ -160,21 +243,22 @@ class ChromaVectorStore:
             else:
                 filter_metadata["user_id"] = user_id
             
-            loop = asyncio.get_event_loop()
-            collection = await loop.run_in_executor(
-                None, 
-                lambda: self._client.get_collection(safe_name)
-            )
-            
-            results = await loop.run_in_executor(
-                None,
-                lambda: collection.query(
-                    query_embeddings=[query_embedding],
-                    n_results=min(n_results, settings.max_results),
-                    where=filter_metadata,
-                    include=["documents", "metadatas", "distances"]
+            # Используем ThreadPoolExecutor для синхронных операций ChromaDB
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                collection = await asyncio.get_event_loop().run_in_executor(
+                    executor, 
+                    lambda: self._client.get_collection(safe_name)
                 )
-            )
+                
+                results = await asyncio.get_event_loop().run_in_executor(
+                    executor,
+                    lambda: collection.query(
+                        query_embeddings=[query_embedding],
+                        n_results=n_results,
+                        where=filter_metadata,
+                        include=["documents", "metadatas", "distances"]
+                    )
+                )
             
             logger.info(f"Query returned {len(results.get('documents', [[]])[0])} results")
             return results
@@ -189,11 +273,12 @@ class ChromaVectorStore:
             validate_user_id(user_id)
             safe_name = f"user_{user_id}_{collection_name}"
             
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                lambda: self._client.delete_collection(safe_name)
-            )
+            # Используем ThreadPoolExecutor для синхронных операций ChromaDB
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                await asyncio.get_event_loop().run_in_executor(
+                    executor,
+                    lambda: self._client.delete_collection(safe_name)
+                )
             
             logger.info(f"Deleted collection {safe_name}")
             return True
@@ -207,8 +292,10 @@ class ChromaVectorStore:
         try:
             validate_user_id(user_id)
             
-            loop = asyncio.get_event_loop()
-            all_collections = await loop.run_in_executor(None, self._client.list_collections)
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                all_collections = await asyncio.get_event_loop().run_in_executor(
+                    executor, self._client.list_collections
+                )
             
             prefix = f"user_{user_id}_"
             user_collections = [
@@ -230,13 +317,13 @@ class ChromaVectorStore:
             validate_user_id(user_id)
             safe_name = f"user_{user_id}_{collection_name}"
             
-            loop = asyncio.get_event_loop()
-            collection = await loop.run_in_executor(
-                None, 
-                lambda: self._client.get_collection(safe_name)
-            )
-            
-            count = await loop.run_in_executor(None, collection.count)
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                collection = await asyncio.get_event_loop().run_in_executor(
+                    executor, 
+                    lambda: self._client.get_collection(safe_name)
+                )
+                
+                count = await asyncio.get_event_loop().run_in_executor(executor, collection.count)
             
             return {
                 "name": collection_name,

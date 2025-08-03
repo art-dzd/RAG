@@ -11,7 +11,7 @@ from app.config import settings
 from app.services.openai_service import openai_service, OpenAIServiceError
 from app.services.vector_store import vector_store, VectorStoreError
 from app.services.file_parser import file_parser_service, FileParserError
-from app.utils.logging_config import get_logger
+from app.utils.logging_config import get_logger, performance_logger
 from app.utils.helpers import generate_unique_id
 
 logger = get_logger(__name__)
@@ -121,7 +121,7 @@ class RAGService:
         Raises:
             RAGServiceError: При ошибке обработки
         """
-        start_time = time.time()
+        performance_logger.start_timer("process_document")
         
         if document_id is None:
             document_id = generate_unique_id()
@@ -159,16 +159,20 @@ class RAGService:
             
             # 5. Сохранение в векторную БД
             logger.info("Шаг 4: Сохранение в векторную БД")
-            vector_ids = await self.vector_store.add_documents(
+            
+            # Создать коллекцию для документа
+            collection_name = f"doc_{document_id}"
+            await self.vector_store.create_collection(collection_name, user_id)
+            
+            # Добавить документы в коллекцию
+            success = await self.vector_store.add_documents(
+                collection_name=collection_name,
                 user_id=user_id,
-                document_id=document_id,
                 texts=texts,
                 embeddings=embeddings,
                 metadatas=metadatas,
-                reset_collection=True  # Сбросить существующую коллекцию для документа
+                document_ids=[f"{document_id}_{i}" for i in range(len(texts))]
             )
-            
-            processing_time = time.time() - start_time
             
             result = {
                 "success": True,
@@ -177,22 +181,23 @@ class RAGService:
                 "file_info": parsed_data,
                 "chunks_count": len(chunks),
                 "embeddings_count": len(embeddings),
-                "vector_ids": vector_ids,
-                "processing_time_seconds": round(processing_time, 2),
+                "processing_time_seconds": round(performance_logger.end_timer("process_document", success=True, chunks_count=len(chunks), embeddings_count=len(embeddings)), 2),
                 "processed_at": datetime.utcnow().isoformat()
             }
             
             logger.info(
-                f"Документ успешно обработан за {processing_time:.2f} секунд. "
+                f"Документ успешно обработан. "
                 f"Создано {len(chunks)} чанков."
             )
             
             return result
             
         except (FileParserError, VectorStoreError, OpenAIServiceError) as e:
+            performance_logger.end_timer("process_document", success=False, error=str(e))
             logger.error(f"Ошибка обработки документа: {e}")
             raise RAGServiceError(f"Ошибка обработки документа: {e}")
         except Exception as e:
+            performance_logger.end_timer("process_document", success=False, error=str(e))
             logger.error(f"Неожиданная ошибка при обработке документа: {e}")
             raise RAGServiceError(f"Неожиданная ошибка: {e}")
     
@@ -222,7 +227,7 @@ class RAGService:
         Raises:
             RAGServiceError: При ошибке выполнения запроса
         """
-        start_time = time.time()
+        performance_logger.start_timer("query_document")
         
         if top_k is None:
             top_k = settings.top_k_results
@@ -234,15 +239,20 @@ class RAGService:
             query_embedding = await self.openai_service.create_single_embedding(query)
             
             # 2. Поиск релевантных чанков
-            search_results = await self.vector_store.search_similar(
+            collection_name = f"doc_{document_id}"
+            search_results = await self.vector_store.query_documents(
+                collection_name=collection_name,
                 user_id=user_id,
-                document_id=document_id,
                 query_embedding=query_embedding,
-                top_k=top_k,
-                min_similarity=min_similarity
+                n_results=top_k
             )
             
-            if not search_results:
+            # Проверить результаты поиска
+            documents = search_results.get('documents', [[]])[0]
+            metadatas = search_results.get('metadatas', [[]])[0]
+            distances = search_results.get('distances', [[]])[0]
+            
+            if not documents:
                 logger.warning(f"Не найдено релевантных чанков для запроса: {query}")
                 return {
                     "success": False,
@@ -252,7 +262,7 @@ class RAGService:
                 }
             
             # 3. Подготовить контекстные документы
-            context_documents = [result['document'] for result in search_results]
+            context_documents = documents
             
             # 4. Подготовить сообщения для GPT
             messages = []
@@ -270,8 +280,6 @@ class RAGService:
                 temperature=0.7
             )
             
-            processing_time = time.time() - start_time
-            
             # 6. Подготовка результата
             result = {
                 "success": True,
@@ -279,37 +287,38 @@ class RAGService:
                 "answer": response['content'],
                 "context_chunks": [
                     {
-                        "text": result['document'],
-                        "similarity": result['similarity'],
-                        "metadata": result['metadata']
+                        "text": doc,
+                        "similarity": 1.0 - dist,  # Конвертируем расстояние в схожесть
+                        "metadata": meta
                     }
-                    for result in search_results
+                    for doc, dist, meta in zip(documents, distances, metadatas)
                 ],
-                "found_chunks": len(search_results),
+                "found_chunks": len(documents),
                 "response_metadata": {
                     "model": response['model'],
                     "usage": response['usage'],
                     "response_time_ms": response['response_time_ms'],
-                    "total_processing_time_ms": int(processing_time * 1000)
+                    "total_processing_time_ms": int(performance_logger.end_timer("query_document", success=True, found_chunks=len(documents)) * 1000)
                 },
                 "timestamp": datetime.utcnow().isoformat()
             }
             
             logger.info(
-                f"Запрос обработан за {processing_time:.2f}с, "
-                f"найдено {len(search_results)} релевантных чанков"
+                f"Запрос обработан, найдено {len(documents)} релевантных чанков"
             )
             
             return result
             
         except (VectorStoreError, OpenAIServiceError) as e:
+            performance_logger.end_timer("query_document", success=False, error=str(e))
             logger.error(f"Ошибка выполнения запроса: {e}")
             raise RAGServiceError(f"Ошибка выполнения запроса: {e}")
         except Exception as e:
+            performance_logger.end_timer("query_document", success=False, error=str(e))
             logger.error(f"Неожиданная ошибка при выполнении запроса: {e}")
             raise RAGServiceError(f"Неожиданная ошибка: {e}")
     
-    def get_document_stats(self, user_id: str, document_id: str) -> Dict[str, Any]:
+    async def get_document_stats(self, user_id: str, document_id: str) -> Dict[str, Any]:
         """
         Получить статистику документа
         
@@ -321,13 +330,14 @@ class RAGService:
             Статистика документа
         """
         try:
-            stats = self.vector_store.get_collection_stats(user_id, document_id)
+            collection_name = f"doc_{document_id}"
+            stats = await self.vector_store.get_collection_stats(collection_name, user_id)
             return {
                 "user_id": user_id,
                 "document_id": document_id,
                 "vector_store_stats": stats,
-                "is_indexed": stats.get("exists", False),
-                "chunks_count": stats.get("count", 0)
+                "is_indexed": stats.get("document_count", 0) > 0,
+                "chunks_count": stats.get("document_count", 0)
             }
         except Exception as e:
             logger.error(f"Ошибка получения статистики документа: {e}")
@@ -339,7 +349,7 @@ class RAGService:
                 "chunks_count": 0
             }
     
-    def delete_document(self, user_id: str, document_id: str) -> bool:
+    async def delete_document(self, user_id: str, document_id: str) -> bool:
         """
         Удалить документ из векторной БД
         
@@ -351,7 +361,8 @@ class RAGService:
             True если документ удалён
         """
         try:
-            result = self.vector_store.delete_user_collection(user_id, document_id)
+            collection_name = f"doc_{document_id}"
+            result = await self.vector_store.delete_collection(collection_name, user_id)
             if result:
                 logger.info(f"Документ {document_id} пользователя {user_id} удалён")
             return result
@@ -359,7 +370,7 @@ class RAGService:
             logger.error(f"Ошибка удаления документа: {e}")
             return False
     
-    def list_user_documents(self, user_id: str) -> List[str]:
+    async def list_user_documents(self, user_id: str) -> List[str]:
         """
         Получить список документов пользователя
         
@@ -370,7 +381,7 @@ class RAGService:
             Список ID документов
         """
         try:
-            collections = self.vector_store.list_user_collections(user_id)
+            collections = await self.vector_store.list_collections(user_id)
             # Извлечь ID документов из имён коллекций
             document_ids = []
             for collection_name in collections:

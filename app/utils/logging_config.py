@@ -65,4 +65,55 @@ def get_logger(name: str) -> structlog.BoundLogger:
     Returns:
         Настроенный логгер
     """
-    return structlog.get_logger(name) 
+    return structlog.get_logger(name)
+
+
+class PerformanceLogger:
+    """Логгер для метрик производительности"""
+    
+    def __init__(self, logger_name: str = "performance"):
+        self.logger = get_logger(logger_name)
+        self.metrics = {}
+    
+    def start_timer(self, operation: str) -> None:
+        """Начать отсчет времени для операции"""
+        import time
+        self.metrics[operation] = {
+            'start_time': time.time(),
+            'status': 'running'
+        }
+    
+    def end_timer(self, operation: str, success: bool = True, **kwargs) -> float:
+        """Завершить отсчет времени и залогировать метрику"""
+        import time
+        
+        if operation not in self.metrics:
+            self.logger.warning(f"Timer for operation '{operation}' was not started")
+            return 0.0
+        
+        end_time = time.time()
+        duration = end_time - self.metrics[operation]['start_time']
+        
+        self.logger.info(
+            f"Operation completed",
+            operation=operation,
+            duration_ms=round(duration * 1000, 2),
+            success=success,
+            **kwargs
+        )
+        
+        del self.metrics[operation]
+        return duration
+    
+    def log_metric(self, metric_name: str, value: float, **kwargs) -> None:
+        """Залогировать метрику"""
+        self.logger.info(
+            f"Metric recorded",
+            metric=metric_name,
+            value=value,
+            **kwargs
+        )
+
+
+# Глобальный экземпляр логгера производительности
+performance_logger = PerformanceLogger() 

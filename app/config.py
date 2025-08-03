@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(200, env="CHUNK_OVERLAP")
     top_k_results: int = Field(5, env="TOP_K_RESULTS")
     min_similarity_threshold: float = Field(0.3, env="MIN_SIMILARITY_THRESHOLD")
+    max_results: int = Field(10, env="MAX_RESULTS")
     
     # Security Configuration
     secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(32), env="SECRET_KEY")
