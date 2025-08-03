@@ -2,7 +2,7 @@
 
 import os
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import List, Dict, Any, Optional
 
 from aiogram import Router, F
 from aiogram.types import Message, Document, ContentType

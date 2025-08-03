@@ -2,7 +2,7 @@
 
 import os
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple, Set
 from pathlib import Path
 
 import PyPDF2

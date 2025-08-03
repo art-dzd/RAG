@@ -1,7 +1,7 @@
 """Configuration settings with enhanced security and modern practices"""
 
 import os
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
 from pydantic import Field, validator, SecretStr
 from pydantic_settings import BaseSettings
 import secrets
