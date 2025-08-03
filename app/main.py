@@ -444,7 +444,9 @@ async def upload_and_process_file(
             )
         
         # Basic malware check (simple content validation)
-        if b'\x00' in content[:1024]:  # Check for null bytes in header
+        # Skip null byte check for PDF files as they commonly contain null bytes in header
+        file_extension = file.filename.split('.')[-1].lower()
+        if file_extension != 'pdf' and b'\x00' in content[:1024]:  # Check for null bytes in header
             raise HTTPException(status_code=400, detail="Invalid file content detected")
         
         # Save file securely

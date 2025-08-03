@@ -1,56 +1,45 @@
-# FastAPI и веб-сервер (стабильные версии для Python 3.8)
-fastapi==0.110.0
-uvicorn==0.27.1
-python-multipart==0.0.12
+# Web Framework
+fastapi
+uvicorn
+python-multipart
 
-# Telegram Bot (стабильная версия для Python 3.8)
-aiogram==3.13.1
+# Telegram Bot
+aiogram
 
-# RAG и LangChain (совместимые версии для Python 3.8)
-langchain==0.1.13
-langchain-openai==0.1.25
-langchain-community==0.0.27
-langchain-chroma==0.0.12
+# AI/ML & RAG
+langchain
+langchain-openai
+langchain-community
+langchain-chroma
+chromadb
+openai
 
-# Векторная БД (совместимая с LangChain)
-chromadb==0.4.24
+# Document Processing
+PyPDF2
+python-docx
 
-# OpenAI (совместимая версия для LangChain)
-openai>=1.58.1,<2.0.0
+# Database
+sqlalchemy
+aiosqlite
 
-# Парсинг файлов
-PyPDF2==3.0.1
-python-docx==1.1.2
+# Configuration & Validation
+python-dotenv
+pydantic
+pydantic-settings
 
-# База данных
-sqlalchemy==2.0.36
-aiosqlite==0.20.0
+# Async & HTTP
+aiofiles
+httpx
 
-# Утилиты (проверенные версии)
-python-dotenv==1.0.1
-pydantic==2.9.2
-pydantic-settings==2.7.0
+# Logging & Monitoring
+structlog
+prometheus-client
 
-# Асинхронность и HTTP
-aiofiles==24.1.0
-httpx==0.28.1
+# Security
+bleach
+cryptography
+passlib[bcrypt]
 
-# Логирование и мониторинг
-structlog==25.4.0
-
-# Безопасность (критически важные пакеты)
-bleach==6.2.0
-cryptography==44.0.0
-passlib[bcrypt]==1.7.4
-
-# Rate limiting и производительность
-slowapi==0.1.9
-tenacity==8.5.0
-
-# Дополнительные утилиты для production
-prometheus-client==0.21.1
-
-# Развитие и тестирование (опционально)
-pytest==8.3.4
-pytest-asyncio==0.24.0
-pytest-cov==6.0.0 
+# Performance & Utilities
+slowapi
+tenacity 

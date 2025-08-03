@@ -24,7 +24,7 @@ class TelegramBot:
     def __init__(self):
         """Инициализация бота"""
         self.bot = Bot(
-            token=settings.telegram_bot_token,
+            token=settings.telegram_bot_token.get_secret_value(),
             default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
         )
         
@@ -116,11 +116,16 @@ class TelegramBot:
 
 
 # Глобальный экземпляр бота
-telegram_bot = TelegramBot()
+telegram_bot = None
 
 
 async def run_bot():
     """Запустить бота"""
+    global telegram_bot
+    
+    # Создаем экземпляр бота только при запуске
+    telegram_bot = TelegramBot()
+    
     try:
         await telegram_bot.start_polling()
     except KeyboardInterrupt:
@@ -129,7 +134,8 @@ async def run_bot():
         logger.error(f"Критическая ошибка бота: {e}")
         sys.exit(1)
     finally:
-        await telegram_bot.stop()
+        if telegram_bot:
+            await telegram_bot.stop()
 
 
 if __name__ == "__main__":

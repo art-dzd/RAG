@@ -1,8 +1,92 @@
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# Data and logs
 data/
 logs/
+*.log
+
+# Python
 __pycache__/
-*.pyc
-.DS_Store
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 venv/
-.code-workspace
+env/
+ENV/
+test_venv/
+.venv/
+.ENV/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Project specific
+.cursor/
+*.code-workspace
+RAG.code-workspace
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Test files
+test_system.py
+demo.py
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Vector database
+chroma_db/
+vector_db/
+
+# User uploaded files
+user_files/
+uploads/
+
+# Cache
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

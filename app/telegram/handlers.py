@@ -36,35 +36,38 @@ class APIClient:
     
     def __init__(self):
         self.base_url = API_BASE_URL
-        self.client = httpx.AsyncClient(timeout=300.0)  # 5 минут таймаут
     
     async def create_user(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
         """Создать или получить пользователя"""
-        async with self.client as client:
-            response = await client.post(f"{self.base_url}/users/", json=user_data)
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            # Добавляем user_id в URL параметры
+            user_id = user_data["telegram_id"]
+            response = await client.post(f"{self.base_url}/users/?user_id={user_id}", json=user_data)
             response.raise_for_status()
             return response.json()
     
     async def upload_file(self, user_id: str, file_path: str) -> Dict[str, Any]:
         """Загрузить файл"""
-        async with self.client as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             with open(file_path, "rb") as f:
                 files = {"file": f}
                 data = {"user_id": user_id}
+                logger.info(f"API запрос: {self.base_url}/upload/ с user_id={user_id}")
                 response = await client.post(f"{self.base_url}/upload/", files=files, data=data)
+                logger.info(f"API ответ: {response.status_code}")
                 response.raise_for_status()
                 return response.json()
     
     async def query_document(self, query_data: Dict[str, Any]) -> Dict[str, Any]:
         """Выполнить запрос к документу"""
-        async with self.client as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             response = await client.post(f"{self.base_url}/query/", json=query_data)
             response.raise_for_status()
             return response.json()
     
     async def get_user_documents(self, user_id: str) -> Dict[str, Any]:
         """Получить список документов пользователя"""
-        async with self.client as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             response = await client.get(f"{self.base_url}/users/{user_id}/documents/")
             response.raise_for_status()
             return response.json()
@@ -314,6 +317,7 @@ async def handle_document(message: Message, state: FSMContext):
                 f.write(file_content.read())
             
             # Загрузить через API
+            logger.info(f"Отправка файла {temp_file_path} для пользователя {user_id}")
             result = await api_client.upload_file(user_id, temp_file_path)
             
             # Удалить временный файл
