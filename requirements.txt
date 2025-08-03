@@ -1,19 +1,19 @@
-# FastAPI и веб-сервер (стабильные версии для Python 3.13)
-fastapi==0.115.6
-uvicorn==0.32.1
+# FastAPI и веб-сервер (стабильные версии для Python 3.8)
+fastapi==0.110.0
+uvicorn==0.27.1
 python-multipart==0.0.12
 
-# Telegram Bot (актуальная стабильная версия)
+# Telegram Bot (стабильная версия для Python 3.8)
 aiogram==3.13.1
 
-# RAG и LangChain (гибкие версии для совместимости)
-langchain>=0.1.13
-langchain-openai>=0.2.14
-langchain-community>=0.0.29
-langchain-chroma>=0.2.5
+# RAG и LangChain (совместимые версии для Python 3.8)
+langchain==0.1.13
+langchain-openai==0.1.25
+langchain-community==0.0.27
+langchain-chroma==0.0.12
 
 # Векторная БД (совместимая с LangChain)
-chromadb>=0.4.24
+chromadb==0.4.24
 
 # OpenAI (совместимая версия для LangChain)
 openai>=1.58.1,<2.0.0
