@@ -7,13 +7,13 @@ python-multipart==0.0.12
 aiogram==3.13.1
 
 # RAG и LangChain (гибкие версии для совместимости)
-langchain>=0.3.12
+langchain>=0.1.13
 langchain-openai>=0.2.14
-langchain-community>=0.3.12
+langchain-community>=0.0.29
 langchain-chroma>=0.2.5
 
 # Векторная БД (совместимая с LangChain)
-chromadb>=1.0.9
+chromadb>=0.4.24
 
 # OpenAI (совместимая версия для LangChain)
 openai>=1.58.1,<2.0.0
@@ -43,7 +43,7 @@ bleach==6.2.0
 cryptography==44.0.0
 passlib[bcrypt]==1.7.4
 
-# Rate limiting и производительность (восстановленные зависимости)
+# Rate limiting и производительность
 slowapi==0.1.9
 tenacity==8.5.0
 

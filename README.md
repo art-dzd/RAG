@@ -78,23 +78,23 @@ graph TB
 ### Installation
 
 1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd RAG
-   ```
+```bash
+git clone <repository-url>
+cd RAG
+```
 
 2. **Create virtual environment**
-   ```bash
-   python -m venv venv
+```bash
+python -m venv venv
    source venv/bin/activate  # Linux/macOS
    # or
    venv\Scripts\activate     # Windows
    ```
 
 3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
 4. **Configure environment**
    ```bash
