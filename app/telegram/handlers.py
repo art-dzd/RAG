@@ -2,6 +2,7 @@
 
 import os
 import asyncio
+import re
 from typing import List, Dict, Any, Optional
 
 from aiogram import Router, F
@@ -23,6 +24,26 @@ router = Router()
 
 # API клиент для взаимодействия с FastAPI
 API_BASE_URL = f"http://{settings.api_host}:{settings.api_port}"
+
+
+def escape_markdown(text: str) -> str:
+    """
+    Экранировать специальные символы для безопасного использования в Markdown
+    
+    Args:
+        text: Текст для экранирования
+        
+    Returns:
+        Экранированный текст
+    """
+    # Символы, которые нужно экранировать в Markdown
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    
+    escaped_text = text
+    for char in special_chars:
+        escaped_text = escaped_text.replace(char, f'\\{char}')
+    
+    return escaped_text
 
 
 class UserStates(StatesGroup):
@@ -222,8 +243,10 @@ async def documents_command(message: Message):
         
         for i, doc in enumerate(documents, 1):
             status = "✅ Обработан" if doc["is_processed"] else "⏳ Обрабатывается"
+            # Экранировать название файла для безопасного отображения
+            safe_filename = escape_markdown(doc['filename'])
             docs_text += (
-                f"{i}. **{doc['filename']}**\n"
+                f"{i}. **{safe_filename}**\n"
                 f"   📊 Тип: {doc['file_type'].upper()}\n"
                 f"   📏 Размер: {doc['file_size_mb']:.2f} МБ\n"
                 f"   🧩 Частей: {doc['chunks_count']}\n"
@@ -293,9 +316,12 @@ async def handle_document(message: Message, state: FSMContext):
             )
             return
         
+        # Экранировать название файла для безопасного отображения
+        safe_filename = escape_markdown(document.file_name)
+        
         # Отправить уведомление о начале обработки
         processing_message = await message.answer(
-            f"⏳ **Обрабатываю документ:** {document.file_name}\n\n"
+            f"⏳ **Обрабатываю документ:** {safe_filename}\n\n"
             f"📊 Размер: {file_size_mb:.2f} МБ\n"
             f"🔄 Это может занять несколько минут...",
             parse_mode="Markdown"
@@ -310,8 +336,8 @@ async def handle_document(message: Message, state: FSMContext):
             temp_dir = f"./data/user_files/{user_id}/temp"
             os.makedirs(temp_dir, exist_ok=True)
             
-            safe_filename = sanitize_filename(document.file_name)
-            temp_file_path = os.path.join(temp_dir, safe_filename)
+            safe_filename_for_path = sanitize_filename(document.file_name)
+            temp_file_path = os.path.join(temp_dir, safe_filename_for_path)
             
             with open(temp_file_path, "wb") as f:
                 f.write(file_content.read())
@@ -329,10 +355,10 @@ async def handle_document(message: Message, state: FSMContext):
                 context["current_document_id"] = result["document_id"]
                 context["chat_history"] = []  # Очистить историю для нового документа
                 
-                # Успешное сообщение
+                # Успешное сообщение с экранированным названием файла
                 success_text = (
                     f"✅ **Документ успешно обработан!**\n\n"
-                    f"📄 Файл: {document.file_name}\n"
+                    f"📄 Файл: {safe_filename}\n"
                     f"🧩 Создано частей: {result['chunks_count']}\n"
                     f"⏱ Время обработки: {result['processing_time_seconds']:.1f} сек\n\n"
                     f"💬 Теперь вы можете задавать вопросы по содержимому документа!"
