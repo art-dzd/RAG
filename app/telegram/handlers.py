@@ -92,6 +92,13 @@ class APIClient:
             response = await client.get(f"{self.base_url}/users/{user_id}/documents/")
             response.raise_for_status()
             return response.json()
+    
+    async def delete_document(self, user_id: str, document_id: str) -> Dict[str, Any]:
+        """Удалить документ пользователя"""
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.delete(f"{self.base_url}/documents/{document_id}?user_id={user_id}")
+            response.raise_for_status()
+            return response.json()
 
 
 # Глобальный API клиент
@@ -164,7 +171,13 @@ async def start_command(message: Message, state: FSMContext):
 /start - Начать работу
 /help - Помощь
 /documents - Мои документы
+/delete - Удалить документ
 /clear - Очистить историю чата
+
+**Управление документами:**
+📄 /documents - Просмотр всех документов
+🗑️ /delete - Удаление документов
+🧹 /clear - Очистка истории диалога
 
 Отправьте документ, чтобы начать! 📎
         """
@@ -206,7 +219,13 @@ async def help_command(message: Message):
 /start - Начать работу
 /help - Эта справка
 /documents - Список ваших документов
+/delete - Удалить документ
 /clear - Очистить историю текущего чата
+
+**Управление документами:**
+📄 /documents - Просмотр всех загруженных документов
+🗑️ /delete - Выбор и удаление документа
+🧹 /clear - Очистка истории диалога (документы остаются)
 
 **Примеры вопросов:**
 • "О чём этот документ?"
@@ -269,7 +288,7 @@ async def documents_command(message: Message):
 
 @router.message(Command("clear"))
 async def clear_command(message: Message):
-    """Обработчик команды /clear"""
+    """Обработчик команды /clear - очищает только историю чата"""
     user_id = str(message.from_user.id)
     
     # Очистить историю чата пользователя
@@ -277,8 +296,203 @@ async def clear_command(message: Message):
     context["chat_history"] = []
     
     await message.answer(
-        "🧹 История чата очищена!\n\n"
-        "Теперь вы можете начать новый диалог с документом.",
+        "🧹 **История чата очищена!**\n\n"
+        "История диалога сброшена, но ваши документы остались.\n"
+        "Используйте /documents для просмотра документов\n"
+        "Используйте /delete для удаления документов",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("delete"))
+async def delete_command(message: Message):
+    """Обработчик команды /delete - показывает список документов для удаления"""
+    try:
+        user_id = str(message.from_user.id)
+        
+        # Получить список документов через API
+        result = await api_client.get_user_documents(user_id)
+        documents = result.get("documents", [])
+        
+        if not documents:
+            await message.answer(
+                "📁 У вас нет документов для удаления.\n\n"
+                "Сначала загрузите документ (PDF, DOCX или TXT)!",
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Сформировать список документов с кнопками удаления
+        docs_text = "🗑️ **Выберите документ для удаления:**\n\n"
+        
+        for i, doc in enumerate(documents, 1):
+            status = "✅ Обработан" if doc["is_processed"] else "⏳ Обрабатывается"
+            # Экранировать название файла для безопасного отображения
+            safe_filename = escape_markdown(doc['filename'])
+            docs_text += (
+                f"{i}. **{safe_filename}**\n"
+                f"   📊 Тип: {doc['file_type'].upper()}\n"
+                f"   📏 Размер: {doc['file_size_mb']:.2f} МБ\n"
+                f"   📅 Загружен: {doc['uploaded_at'][:10]}\n"
+                f"   {status}\n\n"
+            )
+        
+        docs_text += (
+            f"**Всего документов:** {len(documents)}\n\n"
+            "💡 **Для удаления документа отправьте его номер**\n"
+            "Например: `1` для удаления первого документа\n\n"
+            "⚠️ **Внимание:** Удаление необратимо!"
+        )
+        
+        await message.answer(docs_text, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.error(f"Ошибка в delete_command: {e}")
+        await message.answer(
+            "❌ Ошибка при получении списка документов. Попробуйте позже.",
+            parse_mode="Markdown"
+        )
+
+
+@router.message(F.text.regexp(r'^\d+$'))
+async def handle_document_number(message: Message):
+    """Обработчик выбора номера документа для удаления"""
+    try:
+        user_id = str(message.from_user.id)
+        document_number = int(message.text)
+        
+        # Получить список документов
+        result = await api_client.get_user_documents(user_id)
+        documents = result.get("documents", [])
+        
+        if not documents:
+            await message.answer(
+                "📁 У вас нет документов для удаления.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Проверить корректность номера
+        if document_number < 1 or document_number > len(documents):
+            await message.answer(
+                f"❌ Неверный номер документа.\n\n"
+                f"Доступные номера: от 1 до {len(documents)}\n"
+                f"Отправьте /delete для просмотра списка документов",
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Получить выбранный документ
+        selected_doc = documents[document_number - 1]
+        document_id = selected_doc["id"]
+        safe_filename = escape_markdown(selected_doc["filename"])
+        
+        # Подтверждение удаления
+        confirm_text = (
+            f"🗑️ **Подтверждение удаления**\n\n"
+            f"📄 Документ: **{safe_filename}**\n"
+            f"📊 Тип: {selected_doc['file_type'].upper()}\n"
+            f"📏 Размер: {selected_doc['file_size_mb']:.2f} МБ\n"
+            f"📅 Загружен: {selected_doc['uploaded_at'][:10]}\n\n"
+            f"⚠️ **Это действие необратимо!**\n\n"
+            f"Для подтверждения отправьте: `да`\n"
+            f"Для отмены отправьте: `нет`"
+        )
+        
+        # Сохранить информацию о выбранном документе в контексте
+        context = get_user_context(user_id)
+        context["pending_delete"] = {
+            "document_id": document_id,
+            "filename": selected_doc["filename"]
+        }
+        
+        await message.answer(confirm_text, parse_mode="Markdown")
+        
+    except ValueError:
+        await message.answer(
+            "❌ Пожалуйста, введите число.\n\n"
+            "Отправьте /delete для просмотра списка документов",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в handle_document_number: {e}")
+        await message.answer(
+            "❌ Ошибка при выборе документа. Попробуйте позже.",
+            parse_mode="Markdown"
+        )
+
+
+@router.message(F.text.lower().in_(["да", "yes", "удалить", "delete"]))
+async def confirm_delete(message: Message):
+    """Обработчик подтверждения удаления документа"""
+    try:
+        user_id = str(message.from_user.id)
+        context = get_user_context(user_id)
+        
+        # Проверить, есть ли ожидающее удаление
+        pending_delete = context.get("pending_delete")
+        if not pending_delete:
+            await message.answer(
+                "❌ Нет документа для удаления.\n\n"
+                "Отправьте /delete для выбора документа",
+                parse_mode="Markdown"
+            )
+            return
+        
+        document_id = pending_delete["document_id"]
+        filename = pending_delete["filename"]
+        safe_filename = escape_markdown(filename)
+        
+        # Удалить документ через API
+        try:
+            result = await api_client.delete_document(user_id, document_id)
+            
+            # Очистить ожидающее удаление
+            context.pop("pending_delete", None)
+            
+            # Если удаляемый документ был текущим, очистить контекст
+            if context.get("current_document_id") == document_id:
+                context["current_document_id"] = None
+                context["chat_history"] = []
+            
+            await message.answer(
+                f"✅ **Документ успешно удалён!**\n\n"
+                f"📄 Файл: **{safe_filename}**\n"
+                f"🗑️ Удалён из базы данных и векторного хранилища\n\n"
+                f"💡 Используйте /documents для просмотра оставшихся документов",
+                parse_mode="Markdown"
+            )
+            
+        except Exception as e:
+            logger.error(f"Ошибка удаления документа: {e}")
+            await message.answer(
+                f"❌ Ошибка при удалении документа:\n{str(e)}\n\n"
+                f"Попробуйте позже или обратитесь к администратору.",
+                parse_mode="Markdown"
+            )
+            
+    except Exception as e:
+        logger.error(f"Ошибка в confirm_delete: {e}")
+        await message.answer(
+            "❌ Произошла ошибка. Попробуйте позже.",
+            parse_mode="Markdown"
+        )
+
+
+@router.message(F.text.lower().in_(["нет", "no", "отмена", "cancel"]))
+async def cancel_delete(message: Message):
+    """Обработчик отмены удаления документа"""
+    user_id = str(message.from_user.id)
+    context = get_user_context(user_id)
+    
+    # Очистить ожидающее удаление
+    context.pop("pending_delete", None)
+    
+    await message.answer(
+        "❌ **Удаление отменено**\n\n"
+        "Документ не был удалён.\n"
+        "Используйте /documents для просмотра документов\n"
+        "Используйте /delete для удаления документов",
         parse_mode="Markdown"
     )
 
