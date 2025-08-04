@@ -5,11 +5,11 @@
 [![LangChain](https://img.shields.io/badge/LangChain-0.3.12-orange.svg)](https://langchain.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**RAG Telegram Bot — chat with your documents**
+## **RAG Telegram Bot — chat with your documents**
 
 Telegram bot with Retrieval-Augmented Generation (RAG) for document conversation (PDF, DOCX, TXT) in natural language. Upload files and ask questions — the bot responds with context from your documents using vector search and GPT 4.1.
 
-**🧠 What's under the hood**
+## **🧠 What's under the hood**
 
 Modern stack for AI interfaces in Python:
 
@@ -264,11 +264,11 @@ MIT License - see [LICENSE](LICENSE) for details.
 [![LangChain](https://img.shields.io/badge/LangChain-0.3.12-orange.svg)](https://langchain.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**RAG Telegram Bot — чат с вашими документами**
+## **RAG Telegram Bot — чат с вашими документами**
 
 Телеграм-бот с Retrieval-Augmented Generation (RAG) для общения с документами (PDF, DOCX, TXT) на естественном языке. Загружайте файлы и задавайте вопросы — бот отвечает с учётом их содержимого, используя векторный поиск и GPT 4.1.
 
-**🧠 Что под капотом**
+## **🧠 Что под капотом**
 
 Современный стек для AI-интерфейсов на Python:
 
