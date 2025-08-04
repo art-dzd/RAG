@@ -1,11 +1,13 @@
-# 🤖 RAG Telegram Bot - Production-Ready AI System
+# RAG Telegram Bot - Enterprise AI System
 
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-green.svg)](https://fastapi.tiangolo.com/)
 [![LangChain](https://img.shields.io/badge/LangChain-0.3.12-orange.svg)](https://langchain.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Enterprise-grade Retrieval-Augmented Generation (RAG) system** with Telegram bot interface, built for production deployment. Processes documents (PDF, DOCX, TXT) and provides contextual AI-powered Q&A using OpenAI's GPT-4o-mini.
+**Enterprise-grade Retrieval-Augmented Generation (RAG) system** with Telegram bot interface, built for production deployment. Processes documents (PDF, DOCX, TXT) and provides contextual AI-powered Q&A using OpenAI's GPT-4.1-mini.
+
+**Advanced AI-powered document processing system** showcasing modern Python development with FastAPI, LangChain, ChromaDB, and aiogram. Features async architecture, comprehensive security (rate limiting, input validation, CORS), production monitoring, and scalable multi-user design. Demonstrates expertise in RAG implementation, vector search, API development, and enterprise-grade application architecture.
 
 ## 🚀 **Key Features**
 
@@ -18,7 +20,7 @@
 ### **🤖 AI/ML Excellence**
 - **RAG implementation** with LangChain 0.3.x
 - **Vector search** using ChromaDB for semantic similarity
-- **GPT-4o-mini integration** with streaming responses
+- **GPT-4.1-mini integration** with streaming responses
 - **Smart document chunking** with configurable parameters
 
 ### **🔒 Enterprise Security**
@@ -244,14 +246,16 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-## 🇷🇺 **RAG Telegram Bot - Готовая к продакшену AI система**
+## 🇷🇺 **RAG Telegram Bot - Корпоративная AI система**
 
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-green.svg)](https://fastapi.tiangolo.com/)
 [![LangChain](https://img.shields.io/badge/LangChain-0.3.12-orange.svg)](https://langchain.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Система Retrieval-Augmented Generation (RAG) корпоративного уровня** с интерфейсом Telegram бота, созданная для продакшен развертывания. Обрабатывает документы (PDF, DOCX, TXT) и предоставляет контекстные AI-ответы используя OpenAI GPT-4o-mini.
+**Система Retrieval-Augmented Generation (RAG) корпоративного уровня** с интерфейсом Telegram бота, созданная для продакшен развертывания. Обрабатывает документы (PDF, DOCX, TXT) и предоставляет контекстные AI-ответы используя OpenAI GPT-4.1-mini.
+
+**Продвинутая AI-система обработки документов**, демонстрирующая современную разработку на Python с FastAPI, LangChain, ChromaDB и aiogram. Включает асинхронную архитектуру, комплексную безопасность (rate limiting, валидация входных данных, CORS), мониторинг продакшена и масштабируемый дизайн для множественных пользователей. Демонстрирует экспертизу в реализации RAG, векторном поиске, разработке API и архитектуре корпоративного уровня.
 
 ## 🚀 **Ключевые возможности**
 
@@ -264,7 +268,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 ### **🤖 AI/ML превосходство**
 - **RAG реализация** с LangChain 0.3.x
 - **Векторный поиск** используя ChromaDB для семантического поиска
-- **Интеграция GPT-4o-mini** с потоковыми ответами
+- **Интеграция GPT-4.1-mini** с потоковыми ответами
 - **Умное разбиение документов** с настраиваемыми параметрами
 
 ### **🔒 Корпоративная безопасность**
