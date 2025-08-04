@@ -13,12 +13,12 @@ Telegram bot with Retrieval-Augmented Generation (RAG) for document conversation
 
 Modern stack for AI interfaces in Python:
 
-**FastAPI** — API server with async architecture
-**LangChain** — RAG logic and processing chains
-**ChromaDB** — vector storage for semantic search
-**OpenAI GPT-4.1-mini** — context-aware response generation
-**aiogram 3.x** — Telegram interface
-**SQLite** — database for metadata and history storage
+- **FastAPI** — API server with async architecture
+- **LangChain** — RAG logic and processing chains  
+- **ChromaDB** — vector storage for semantic search
+- **OpenAI GPT-4.1-mini** — context-aware response generation
+- **aiogram 3.x** — Telegram interface
+- **SQLite** — database for metadata and history storage
 
 ## 🎯 **Use Cases**
 
@@ -272,17 +272,12 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 Современный стек для AI-интерфейсов на Python:
 
-**FastAPI** — API сервер с асинхронной архитектурой
-
-**LangChain** — RAG-логика и цепочки обработки
-
-**ChromaDB** — векторное хранилище для семантического поиска
-
-**OpenAI GPT-4.1-mini** — генерация ответов с учётом контекста
-
-**aiogram 3.x** — Telegram-интерфейс
-
-**SQLite** — база для хранения метаданных и истории
+- **FastAPI** — API сервер с асинхронной архитектурой
+- **LangChain** — RAG-логика и цепочки обработки
+- **ChromaDB** — векторное хранилище для семантического поиска
+- **OpenAI GPT-4.1-mini** — генерация ответов с учётом контекста
+- **aiogram 3.x** — Telegram-интерфейс
+- **SQLite** — база для хранения метаданных и истории
 
 ## **🎯 Примеры использования**
 
