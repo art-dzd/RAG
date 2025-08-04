@@ -7,25 +7,20 @@
 
 **RAG Telegram Bot — chat with your documents**
 
-Telegram bot with Retrieval-Augmented Generation (RAG) for document conversation (PDF, DOCX, TXT) in natural language. Upload files and ask questions — the bot responds with context from your documents using vector search and GPT-4.1-mini.
+Telegram bot with Retrieval-Augmented Generation (RAG) for document conversation (PDF, DOCX, TXT) in natural language. Upload files and ask questions — the bot responds with context from your documents using vector search and GPT 4.1.
 
 **🧠 What's under the hood**
 
 Modern stack for AI interfaces in Python:
 
 **FastAPI** — API server with async architecture
-
 **LangChain** — RAG logic and processing chains
-
 **ChromaDB** — vector storage for semantic search
-
 **OpenAI GPT-4.1-mini** — context-aware response generation
-
 **aiogram 3.x** — Telegram interface
-
 **SQLite** — database for metadata and history storage
 
-**🧪 Usage examples**
+## 🎯 **Use Cases**
 
 **📚 Education**
 - Ask questions about uploaded textbooks
@@ -41,23 +36,6 @@ Modern stack for AI interfaces in Python:
 - RAG implementation example with production architecture
 - Ready integration Telegram + FastAPI + OpenAI
 - Suitable as foundation for SaaS or internal assistant
-
-## 🎯 **Use Cases**
-
-### **📚 Document Q&A**
-- Upload research papers, manuals, reports
-- Ask contextual questions about content
-- Get AI-powered summaries and insights
-
-### **💼 Business Intelligence**
-- Process company documents and policies
-- Extract key information and trends
-- Generate reports and summaries
-
-### **🎓 Educational Content**
-- Upload textbooks and course materials
-- Create interactive learning experiences
-- Provide instant answers to student questions
 
 ## 🚀 **Key Features**
 
@@ -288,7 +266,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 **RAG Telegram Bot — чат с вашими документами**
 
-Телеграм-бот с Retrieval-Augmented Generation (RAG) для общения с документами (PDF, DOCX, TXT) на естественном языке. Загружайте файлы и задавайте вопросы — бот отвечает с учётом их содержимого, используя векторный поиск и GPT-4.1-mini.
+Телеграм-бот с Retrieval-Augmented Generation (RAG) для общения с документами (PDF, DOCX, TXT) на естественном языке. Загружайте файлы и задавайте вопросы — бот отвечает с учётом их содержимого, используя векторный поиск и GPT 4.1.
 
 **🧠 Что под капотом**
 
@@ -306,7 +284,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 **SQLite** — база для хранения метаданных и истории
 
-**🧪 Примеры использования**
+## **🎯 Примеры использования**
 
 **📚 Образование**
 - Задавать вопросы по загруженным учебникам
@@ -322,23 +300,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 - Пример RAG-реализации с продакшн-архитектурой
 - Готовая интеграция Telegram + FastAPI + OpenAI
 - Подходит как основа для SaaS или внутреннего ассистента
-
-## 🎯 **Как можно использовать**
-
-### **📚 Документальные Q&A**
-- Загружайте исследовательские работы, мануалы, отчеты
-- Задавайте контекстные вопросы о содержании
-- Получайте AI-powered резюме и инсайты
-
-### **💼 Бизнес-аналитика**
-- Обрабатывайте корпоративные документы и политики
-- Извлекайте ключевую информацию и тренды
-- Генерируйте отчеты и резюме
-
-### **🎓 Образовательный контент**
-- Загружайте учебники и материалы курсов
-- Создавайте интерактивные обучающие опыты
-- Предоставляйте мгновенные ответы на вопросы студентов
 
 ## 🚀 **Ключевые возможности**
 
