@@ -1,13 +1,63 @@
-# RAG Telegram Bot - Enterprise AI System
+# RAG Telegram Bot
 
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-green.svg)](https://fastapi.tiangolo.com/)
 [![LangChain](https://img.shields.io/badge/LangChain-0.3.12-orange.svg)](https://langchain.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Enterprise-grade Retrieval-Augmented Generation (RAG) system** with Telegram bot interface, built for production deployment. Processes documents (PDF, DOCX, TXT) and provides contextual AI-powered Q&A using OpenAI's GPT-4.1-mini.
+**RAG Telegram Bot — chat with your documents**
 
-**Advanced AI-powered document processing system** showcasing modern Python development with FastAPI, LangChain, ChromaDB, and aiogram. Features async architecture, comprehensive security (rate limiting, input validation, CORS), production monitoring, and scalable multi-user design. Demonstrates expertise in RAG implementation, vector search, API development, and enterprise-grade application architecture.
+Telegram bot with Retrieval-Augmented Generation (RAG) for document conversation (PDF, DOCX, TXT) in natural language. Upload files and ask questions — the bot responds with context from your documents using vector search and GPT-4.1-mini.
+
+**🧠 What's under the hood**
+
+Modern stack for AI interfaces in Python:
+
+**FastAPI** — API server with async architecture
+
+**LangChain** — RAG logic and processing chains
+
+**ChromaDB** — vector storage for semantic search
+
+**OpenAI GPT-4.1-mini** — context-aware response generation
+
+**aiogram 3.x** — Telegram interface
+
+**SQLite** — database for metadata and history storage
+
+**🧪 Usage examples**
+
+**📚 Education**
+- Ask questions about uploaded textbooks
+- Prepare for exams based on notes
+- Convert PDF courses to dialog format
+
+**💼 Document work**
+- Quick information search in manuals, reports
+- Answers on uploaded regulations and policies
+- Generate summaries of long texts
+
+**👨‍💻 Product/AI development**
+- RAG implementation example with production architecture
+- Ready integration Telegram + FastAPI + OpenAI
+- Suitable as foundation for SaaS or internal assistant
+
+## 🎯 **Use Cases**
+
+### **📚 Document Q&A**
+- Upload research papers, manuals, reports
+- Ask contextual questions about content
+- Get AI-powered summaries and insights
+
+### **💼 Business Intelligence**
+- Process company documents and policies
+- Extract key information and trends
+- Generate reports and summaries
+
+### **🎓 Educational Content**
+- Upload textbooks and course materials
+- Create interactive learning experiences
+- Provide instant answers to student questions
 
 ## 🚀 **Key Features**
 
@@ -223,39 +273,72 @@ RAG/
 └── requirements.txt         # Dependencies
 ```
 
-## 🎯 **Use Cases**
-
-### **📚 Document Q&A**
-- Upload research papers, manuals, reports
-- Ask contextual questions about content
-- Get AI-powered summaries and insights
-
-### **💼 Business Intelligence**
-- Process company documents and policies
-- Extract key information and trends
-- Generate reports and summaries
-
-### **🎓 Educational Content**
-- Upload textbooks and course materials
-- Create interactive learning experiences
-- Provide instant answers to student questions
-
 ## 📄 **License**
 
 MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-## 🇷🇺 **RAG Telegram Bot - Корпоративная AI система**
+## 🇷🇺 **RAG Telegram Bot**
 
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-green.svg)](https://fastapi.tiangolo.com/)
 [![LangChain](https://img.shields.io/badge/LangChain-0.3.12-orange.svg)](https://langchain.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Система Retrieval-Augmented Generation (RAG) корпоративного уровня** с интерфейсом Telegram бота, созданная для продакшен развертывания. Обрабатывает документы (PDF, DOCX, TXT) и предоставляет контекстные AI-ответы используя OpenAI GPT-4.1-mini.
+**RAG Telegram Bot — чат с вашими документами**
 
-**Продвинутая AI-система обработки документов**, демонстрирующая современную разработку на Python с FastAPI, LangChain, ChromaDB и aiogram. Включает асинхронную архитектуру, комплексную безопасность (rate limiting, валидация входных данных, CORS), мониторинг продакшена и масштабируемый дизайн для множественных пользователей. Демонстрирует экспертизу в реализации RAG, векторном поиске, разработке API и архитектуре корпоративного уровня.
+Телеграм-бот с Retrieval-Augmented Generation (RAG) для общения с документами (PDF, DOCX, TXT) на естественном языке. Загружайте файлы и задавайте вопросы — бот отвечает с учётом их содержимого, используя векторный поиск и GPT-4.1-mini.
+
+**🧠 Что под капотом**
+
+Современный стек для AI-интерфейсов на Python:
+
+**FastAPI** — API сервер с асинхронной архитектурой
+
+**LangChain** — RAG-логика и цепочки обработки
+
+**ChromaDB** — векторное хранилище для семантического поиска
+
+**OpenAI GPT-4.1-mini** — генерация ответов с учётом контекста
+
+**aiogram 3.x** — Telegram-интерфейс
+
+**SQLite** — база для хранения метаданных и истории
+
+**🧪 Примеры использования**
+
+**📚 Образование**
+- Задавать вопросы по загруженным учебникам
+- Готовиться к экзаменам на основе конспектов
+- Переводить PDF-курсы в диалоговый формат
+
+**💼 Работа с документами**
+- Быстрый поиск информации в инструкциях, отчётах
+- Ответы по загруженным регламентам и политикам
+- Генерация резюме по длинным текстам
+
+**👨‍💻 Продукт/AI-разработка**
+- Пример RAG-реализации с продакшн-архитектурой
+- Готовая интеграция Telegram + FastAPI + OpenAI
+- Подходит как основа для SaaS или внутреннего ассистента
+
+## 🎯 **Как можно использовать**
+
+### **📚 Документальные Q&A**
+- Загружайте исследовательские работы, мануалы, отчеты
+- Задавайте контекстные вопросы о содержании
+- Получайте AI-powered резюме и инсайты
+
+### **💼 Бизнес-аналитика**
+- Обрабатывайте корпоративные документы и политики
+- Извлекайте ключевую информацию и тренды
+- Генерируйте отчеты и резюме
+
+### **🎓 Образовательный контент**
+- Загружайте учебники и материалы курсов
+- Создавайте интерактивные обучающие опыты
+- Предоставляйте мгновенные ответы на вопросы студентов
 
 ## 🚀 **Ключевые возможности**
 
@@ -446,23 +529,6 @@ RAG/
 ├── logs/                    # Логи приложения
 └── requirements.txt         # Зависимости
 ```
-
-## 🎯 **Случаи использования**
-
-### **📚 Документальные Q&A**
-- Загружайте исследовательские работы, мануалы, отчеты
-- Задавайте контекстные вопросы о содержании
-- Получайте AI-powered резюме и инсайты
-
-### **💼 Бизнес-аналитика**
-- Обрабатывайте корпоративные документы и политики
-- Извлекайте ключевую информацию и тренды
-- Генерируйте отчеты и резюме
-
-### **🎓 Образовательный контент**
-- Загружайте учебники и материалы курсов
-- Создавайте интерактивные обучающие опыты
-- Предоставляйте мгновенные ответы на вопросы студентов
 
 ## 📄 **Лицензия**
 
