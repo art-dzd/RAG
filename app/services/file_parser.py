@@ -201,12 +201,13 @@ class FileParserService:
         file_extension = filename.split('.')[-1].lower()
         return file_extension in self.parsers
     
-    def parse_file(self, file_path: str) -> dict:
+    def parse_file(self, file_path: str, file_hash: Optional[str] = None) -> dict:
         """
         Парсить файл и извлечь текст
         
         Args:
             file_path: Путь к файлу
+            file_hash: Предвычисленный хеш файла (опционально)
             
         Returns:
             Словарь с результатами парсинга
@@ -238,7 +239,7 @@ class FileParserService:
                 'file_path': file_path,
                 'file_type': file_extension,
                 'file_size_mb': get_file_size_mb(file_path),
-                'file_hash': get_file_hash(file_path),
+                'file_hash': file_hash if file_hash else get_file_hash(file_path),
                 'extracted_text': extracted_text,
                 'text_length': len(extracted_text),
                 'word_count': len(extracted_text.split()),

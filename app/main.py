@@ -31,7 +31,9 @@ from app.utils.helpers import (
     is_valid_file_extension,
     validate_user_id,
     sanitize_text_input,
-    validate_and_resolve_path
+    validate_and_resolve_path,
+    get_content_hash,
+    check_file_duplicate
 )
 
 # Setup logging
@@ -443,11 +445,21 @@ async def upload_and_process_file(
                 detail=f"File too large: {file_size_mb:.2f}MB > {settings.max_file_size_mb}MB"
             )
         
-        # Basic malware check (simple content validation)
-        # Skip null byte check for PDF files as they commonly contain null bytes in header
-        file_extension = file.filename.split('.')[-1].lower()
-        if file_extension != 'pdf' and b'\x00' in content[:1024]:  # Check for null bytes in header
-            raise HTTPException(status_code=400, detail="Invalid file content detected")
+        # Calculate file hash for duplicate detection
+        file_hash = get_content_hash(content)
+        
+        # Check for duplicate file
+        existing_doc = check_file_duplicate(db, user.id, file_hash)
+        if existing_doc:
+            logger.info(f"Duplicate file detected for user {validated_user_id}: {file.filename}")
+            return DocumentProcessResponse(
+                success=True,
+                document_id=existing_doc.document_id if hasattr(existing_doc, 'document_id') else str(existing_doc.id),
+                user_id=validated_user_id,
+                chunks_count=existing_doc.total_chunks or 0,
+                processing_time_seconds=0.0,
+                error="File already exists"
+            )
         
         # Save file securely
         try:
@@ -464,7 +476,8 @@ async def upload_and_process_file(
             result = await rag_service.process_document(
                 user_id=validated_user_id,
                 file_path=str(file_path),
-                document_id=document_id
+                document_id=document_id,
+                file_hash=file_hash
             )
             
             # Save document record
@@ -475,7 +488,7 @@ async def upload_and_process_file(
                 file_path=str(file_path),
                 file_type=file.filename.split('.')[-1].lower(),
                 file_size_mb=file_size_mb,
-                file_hash=result['file_info']['file_hash'],
+                file_hash=file_hash,  # Use computed hash instead of from result
                 is_processed=True,
                 total_chunks=result['chunks_count'],
                 processed_at=datetime.utcnow()

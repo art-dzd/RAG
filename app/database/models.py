@@ -3,7 +3,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, 
-    Boolean, ForeignKey, Float, JSON
+    Boolean, ForeignKey, Float, JSON, Index
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -54,6 +54,11 @@ class Document(Base):
     # Связи
     user = relationship("User", back_populates="documents")
     conversations = relationship("Conversation", back_populates="document")
+    
+    # Уникальный индекс для предотвращения дубликатов файлов у одного пользователя
+    __table_args__ = (
+        Index('ix_documents_user_hash_unique', 'user_id', 'file_hash', unique=True),
+    )
 
 
 class Conversation(Base):

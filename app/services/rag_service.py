@@ -105,7 +105,8 @@ class RAGService:
         self,
         user_id: str,
         file_path: str,
-        document_id: Optional[str] = None
+        document_id: Optional[str] = None,
+        file_hash: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Обработать документ: парсинг, разбиение на чанки, создание эмбеддингов, индексация
@@ -114,6 +115,7 @@ class RAGService:
             user_id: ID пользователя
             file_path: Путь к файлу
             document_id: ID документа (если None - генерируется автоматически)
+            file_hash: Предвычисленный хеш файла (опционально)
             
         Returns:
             Результат обработки
@@ -131,7 +133,7 @@ class RAGService:
             
             # 1. Парсинг файла
             logger.info("Шаг 1: Парсинг файла")
-            parsed_data = self.file_parser.parse_file(file_path)
+            parsed_data = self.file_parser.parse_file(file_path, file_hash)
             extracted_text = parsed_data['extracted_text']
             
             # 2. Разбиение на чанки

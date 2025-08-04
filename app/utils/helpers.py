@@ -54,6 +54,50 @@ def get_file_hash(file_path: str, algorithm: str = "sha256") -> str:
         raise IOError(f"Error reading file {file_path}: {e}")
 
 
+def get_content_hash(content: bytes, algorithm: str = "sha256") -> str:
+    """
+    Get hash from content bytes using specified algorithm
+    
+    Args:
+        content: File content as bytes
+        algorithm: Hash algorithm (sha256, md5, sha1)
+        
+    Returns:
+        Content hash in hexadecimal format
+        
+    Raises:
+        ValueError: If algorithm is not supported
+    """
+    if algorithm not in ["sha256", "md5", "sha1"]:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+    
+    hash_func = getattr(hashlib, algorithm)()
+    hash_func.update(content)
+    return hash_func.hexdigest()
+
+
+def check_file_duplicate(db_session, user_id: int, file_hash: str) -> Optional[dict]:
+    """
+    Check if file with same hash already exists for user
+    
+    Args:
+        db_session: Database session
+        user_id: User ID
+        file_hash: File hash to check
+        
+    Returns:
+        Existing document record if found, None otherwise
+    """
+    from app.database.models import Document
+    
+    existing_doc = db_session.query(Document).filter(
+        Document.user_id == user_id,
+        Document.file_hash == file_hash
+    ).first()
+    
+    return existing_doc
+
+
 def ensure_directory_exists(directory_path: str) -> None:
     """
     Ensure directory exists with security checks
